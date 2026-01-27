@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #f8fafc; /* WebLayout 배경과 맞춤(선택) */
+  color: #0f172a;      /* text-slate-900과 맞춤(선택) */
+}

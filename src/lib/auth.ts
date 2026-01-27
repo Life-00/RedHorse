@@ -1,0 +1,41 @@
+import { signUp, confirmSignUp, signIn, signOut, fetchAuthSession } from "aws-amplify/auth";
+
+export async function authIsSignedIn(): Promise<boolean> {
+  try {
+    const s = await fetchAuthSession();
+    return Boolean(s.tokens?.idToken);
+  } catch {
+    return false;
+  }
+}
+
+export async function authSignUp(params: { email: string; password: string; name: string }) {
+  return signUp({
+    username: params.email, // ✅ 이메일을 username으로
+    password: params.password,
+    options: {
+      userAttributes: {
+        email: params.email,
+        name: params.name,
+      },
+    },
+  });
+}
+
+export async function authConfirmSignUp(params: { email: string; code: string }) {
+  return confirmSignUp({
+    username: params.email,
+    confirmationCode: params.code,
+  });
+}
+
+export async function authSignIn(params: { email: string; password: string }) {
+  return signIn({
+    username: params.email,
+    password: params.password,
+  });
+}
+
+export async function authSignOut() {
+  await signOut();
+}
