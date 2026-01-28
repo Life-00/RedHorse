@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import MobileFrame from "./components/layout/MobileFrame";
+import FloatingChatbot from "./components/shared/FloatingChatbot";
 
 import type { ScreenType, UserPreferences } from "./types/app";
 
@@ -29,6 +30,9 @@ import { fetchAuthSession } from "aws-amplify/auth";
 import { userApi } from "./lib/api";
 
 const AUTHPAGES: ScreenType[] = ["login", "signup"];
+
+// 로그아웃 상태 페이지 (챗봇 표시 안 함)
+const LOGGED_OUT_PAGES: ScreenType[] = ["home-loggedout", "login", "signup"];
 
 export default function App() {
   const [screen, setScreen] = useState<ScreenType>("home-loggedout"); // 초기 화면을 로그아웃 홈으로 변경
@@ -246,6 +250,9 @@ export default function App() {
           {screen === "relax" && <RelaxationHubPage onNavigate={setScreen} />}
         </motion.div>
       </AnimatePresence>
+
+      {/* 플로팅 챗봇 - 로그인된 페이지에만 표시 */}
+      {isAuthed && !LOGGED_OUT_PAGES.includes(screen) && <FloatingChatbot />}
     </MobileFrame>
   );
 }

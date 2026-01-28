@@ -262,9 +262,12 @@ def lambda_handler(event, context):
     try:
         logger.info(f"이벤트 수신: {json.dumps(event)}")
         
-        # HTTP 메서드 및 경로 추출
-        http_method = event.get('httpMethod', '')
-        path = event.get('path', '')
+        # HTTP 메서드 및 경로 추출 (API Gateway v2 형식 지원)
+        http_method = event.get('requestContext', {}).get('http', {}).get('method', event.get('httpMethod', ''))
+        raw_path = event.get('rawPath', event.get('path', ''))
+        
+        # /prod 접두사 제거 (API Gateway stage)
+        path = raw_path.replace('/prod', '', 1) if raw_path.startswith('/prod') else raw_path
         
         # CORS preflight 처리
         if http_method == 'OPTIONS':

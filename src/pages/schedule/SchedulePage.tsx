@@ -270,12 +270,18 @@ export default function SchedulePage({ onNavigate }: Props) {
     if (!userId) return;
     
     try {
-      console.log("schedule image selected:", file);
-      // TODO: 실제 이미지 업로드 구현
-      const response = await scheduleApi.uploadScheduleImage(userId);
-      console.log('이미지 업로드 응답:', response);
+      console.log("📤 이미지 업로드 시작:", file.name, file.size, "bytes");
+      
+      const response = await scheduleApi.uploadScheduleImage(userId, file);
+      console.log('✅ 이미지 업로드 성공:', response);
+      
+      // OCR 결과가 있으면 사용자에게 알림
+      if (response.upload?.ocr_result) {
+        alert(`이미지 업로드 완료!\n인식된 스케줄: ${response.upload.ocr_result.schedules?.length || 0}개`);
+      }
     } catch (error) {
-      console.error('이미지 업로드 실패:', error);
+      console.error('❌ 이미지 업로드 실패:', error);
+      alert('이미지 업로드에 실패했습니다.');
     }
   };
 
@@ -346,7 +352,7 @@ export default function SchedulePage({ onNavigate }: Props) {
   // 로딩 상태
   if (userLoading || loading) {
     return (
-      <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden relative">
+      <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden">
         <TopBar title="근무표" onNavigate={onNavigate} backTo="home" />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
@@ -359,7 +365,7 @@ export default function SchedulePage({ onNavigate }: Props) {
   }
 
   return (
-    <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden relative">
+    <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden">
       <TopBar
         title="근무표"
         onNavigate={onNavigate}
@@ -529,9 +535,7 @@ export default function SchedulePage({ onNavigate }: Props) {
         </div>
       </div>
 
-      <div className="shrink-0">
-        <BottomNav active="schedule" onNavigate={onNavigate} />
-      </div>
+      <BottomNav active="schedule" onNavigate={onNavigate} />
 
       <ScheduleRegisterModal
         open={registerOpen}

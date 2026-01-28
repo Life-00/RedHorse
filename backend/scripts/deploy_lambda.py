@@ -238,9 +238,9 @@ def deploy_lambda_function(function_name, role_arn, vpc_config):
     try:
         # 기존 함수 확인
         try:
-            lambda_client.get_function(FunctionName=lambda_function_name)
+            response = lambda_client.get_function(FunctionName=lambda_function_name)
             
-            # 함수 코드만 업데이트 (설정은 변경하지 않음)
+            # 함수 코드만 업데이트
             print_info(f"기존 함수 코드 업데이트 중: {lambda_function_name}")
             
             lambda_client.update_function_code(
@@ -248,7 +248,46 @@ def deploy_lambda_function(function_name, role_arn, vpc_config):
                 ZipFile=zip_content
             )
             
-            print_success(f"Lambda 함수 코드 업데이트 완료: {lambda_function_name}")
+            # 환경 변수와 VPC 설정 업데이트 (별도 호출)
+            print_info(f"함수 설정 업데이트 중: {lambda_function_name}")
+            
+            # 함수가 Active 상태가 될 때까지 대기
+            import time
+            max_wait = 60  # 최대 60초 대기
+            wait_interval = 5
+            elapsed = 0
+            
+            while elapsed < max_wait:
+                try:
+                    response = lambda_client.get_function(FunctionName=lambda_function_name)
+                    state = response['Configuration']['State']
+                    last_update_status = response['Configuration']['LastUpdateStatus']
+                    
+                    if state == 'Active' and last_update_status == 'Successful':
+                        break
+                    
+                    print_info(f"함수 상태: {state}, 업데이트 상태: {last_update_status}. {wait_interval}초 대기 중...")
+                    time.sleep(wait_interval)
+                    elapsed += wait_interval
+                except Exception as e:
+                    print_warning(f"상태 확인 오류: {e}")
+                    time.sleep(wait_interval)
+                    elapsed += wait_interval
+            
+            update_params = {
+                'FunctionName': lambda_function_name,
+                'Environment': environment,
+                'Timeout': 30,
+                'MemorySize': 512
+            }
+            
+            # VPC 설정 추가 (있는 경우)
+            if vpc_config:
+                update_params['VpcConfig'] = vpc_config
+            
+            lambda_client.update_function_configuration(**update_params)
+            
+            print_success(f"Lambda 함수 업데이트 완료: {lambda_function_name}")
             
         except lambda_client.exceptions.ResourceNotFoundException:
             # 새 함수 생성

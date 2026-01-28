@@ -69,7 +69,7 @@ export default function WellnessPage({
     loadWellnessData();
   }, [userId, userLoading, today]);
   return (
-    <div className="relative h-full flex flex-col bg-[#F8F9FD]">
+    <div className="h-full flex flex-col bg-[#F8F9FD]">
       {/* Header */}
       <div className="px-7 pt-6 pb-6 bg-white rounded-b-[32px] shadow-sm border-b border-gray-100">
         <h1 className="text-[24px] font-black text-[#1A1A1A] mb-1">웰빙</h1>

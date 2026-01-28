@@ -195,7 +195,13 @@ export default function HomeDashboard({ onNavigate }: Props) {
   // 수면창 정보 포맷팅
   const getSleepWindow = () => {
     if (!sleepPlan) return "수면 계획 없음";
-    return `${sleepPlan.main_sleep_start} – ${sleepPlan.main_sleep_end}`;
+    const startTime = sleepPlan.main_sleep_start.includes('T') 
+      ? new Date(sleepPlan.main_sleep_start).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+      : sleepPlan.main_sleep_start;
+    const endTime = sleepPlan.main_sleep_end.includes('T')
+      ? new Date(sleepPlan.main_sleep_end).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+      : sleepPlan.main_sleep_end;
+    return `${startTime} – ${endTime}`;
   };
 
   // 피로 위험도 정보
@@ -288,7 +294,7 @@ export default function HomeDashboard({ onNavigate }: Props) {
           <div className="flex justify-between items-center text-[13.5px] font-black">
             <div className="flex items-center gap-2.5">
               <Clock className="w-4 h-4 opacity-70" />
-              <span>{sleepPlan ? `${sleepPlan.main_sleep_duration}시간 숙면 목표` : '수면 계획을 생성해보세요'}</span>
+              <span>{sleepPlan ? `${Math.round(sleepPlan.main_sleep_duration)}시간 숙면 목표` : '수면 계획을 생성해보세요'}</span>
             </div>
             <ChevronRight className="w-5 h-5 opacity-70" />
           </div>

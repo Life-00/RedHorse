@@ -65,33 +65,37 @@ class AIService:
             """
             schedules = self.db.execute_query(schedule_query, (user_id, plan_date))
             
+            # plan_date를 datetime 객체로 변환
+            plan_datetime = datetime.strptime(plan_date, '%Y-%m-%d')
+            
             # 더미 AI 로직 - 실제로는 외부 AI 서비스 호출
             if schedules and schedules[0]['shift_type'] == 'night':
-                # 야간 근무자용 수면 계획
-                main_sleep_start = "08:00"
-                main_sleep_end = "16:00"
+                # 야간 근무자용 수면 계획 (근무 종료 후 아침에 수면)
+                main_sleep_start = plan_datetime.replace(hour=8, minute=0)
+                main_sleep_end = plan_datetime.replace(hour=16, minute=0)
                 main_sleep_duration = 480  # 8시간
-                nap_start = "20:00"
-                nap_end = "21:00"
+                nap_start = plan_datetime.replace(hour=20, minute=0)
+                nap_end = plan_datetime.replace(hour=21, minute=0)
                 nap_duration = 60  # 1시간
                 rationale = "야간 근무 후 충분한 주간 수면과 근무 전 짧은 낮잠을 권장합니다."
             elif schedules and schedules[0]['shift_type'] == 'evening':
-                # 저녁 근무자용 수면 계획
-                main_sleep_start = "01:00"
-                main_sleep_end = "09:00"
+                # 저녁 근무자용 수면 계획 (근무 종료 후 새벽에 수면)
+                main_sleep_start = (plan_datetime + timedelta(days=1)).replace(hour=1, minute=0)
+                main_sleep_end = (plan_datetime + timedelta(days=1)).replace(hour=9, minute=0)
                 main_sleep_duration = 480  # 8시간
                 nap_start = None
                 nap_end = None
                 nap_duration = None
                 rationale = "저녁 근무 후 늦은 취침과 충분한 아침 수면을 권장합니다."
             else:
-                # 일반 근무자용 수면 계획
-                main_sleep_start = "23:00"
-                main_sleep_end = "07:00"
+                # 일반 근무자용 수면 계획 (밤 11시 - 다음날 아침 7시)
+                main_sleep_start = plan_datetime.replace(hour=23, minute=0)
+                main_sleep_end = (plan_datetime + timedelta(days=1)).replace(hour=7, minute=0)
                 main_sleep_duration = 480  # 8시간
-                nap_start = None
-                nap_end = None
-                nap_duration = None
+                # 낮잠은 다음날 오후로 설정
+                nap_start = (plan_datetime + timedelta(days=1)).replace(hour=15, minute=0)
+                nap_end = (plan_datetime + timedelta(days=1)).replace(hour=16, minute=0)
+                nap_duration = 60  # 1시간
                 rationale = "일반적인 수면 패턴으로 충분한 야간 수면을 권장합니다."
             
             # 데이터베이스에 저장
@@ -109,9 +113,14 @@ class AIService:
                 nap_duration = EXCLUDED.nap_duration,
                 rationale = EXCLUDED.rationale,
                 updated_at = CURRENT_TIMESTAMP
-            RETURNING id, user_id, plan_date, main_sleep_start, main_sleep_end, 
-                     main_sleep_duration, nap_start, nap_end, nap_duration, rationale, 
-                     created_at, updated_at
+            RETURNING id, user_id, plan_date, 
+                     TO_CHAR(main_sleep_start, 'HH24:MI') as main_sleep_start,
+                     TO_CHAR(main_sleep_end, 'HH24:MI') as main_sleep_end,
+                     main_sleep_duration / 60 as main_sleep_duration,
+                     TO_CHAR(nap_start, 'HH24:MI') as nap_start,
+                     TO_CHAR(nap_end, 'HH24:MI') as nap_end,
+                     nap_duration / 60 as nap_duration,
+                     rationale, created_at, updated_at
             """
             
             params = (user_id, plan_date, main_sleep_start, main_sleep_end, 
@@ -126,14 +135,29 @@ class AIService:
         """수면 계획 조회"""
         try:
             query = """
-            SELECT id, user_id, plan_date, main_sleep_start, main_sleep_end, 
-                   main_sleep_duration, nap_start, nap_end, nap_duration, rationale, 
-                   created_at, updated_at
+            SELECT id, user_id, plan_date, 
+                   main_sleep_start,
+                   main_sleep_end,
+                   main_sleep_duration / 60 as main_sleep_duration,
+                   nap_start,
+                   nap_end,
+                   nap_duration / 60 as nap_duration,
+                   rationale, created_at, updated_at
             FROM sleep_plans 
             WHERE user_id = %s AND plan_date = %s
             """
             results = self.db.execute_query(query, (user_id, plan_date))
-            return results[0] if results else None
+            
+            if results:
+                result = results[0]
+                # TIMESTAMP를 ISO 형식 문자열로 변환
+                result['main_sleep_start'] = result['main_sleep_start'].isoformat() if result['main_sleep_start'] else None
+                result['main_sleep_end'] = result['main_sleep_end'].isoformat() if result['main_sleep_end'] else None
+                result['nap_start'] = result['nap_start'].isoformat() if result['nap_start'] else None
+                result['nap_end'] = result['nap_end'].isoformat() if result['nap_end'] else None
+                return result
+            
+            return None
         except Exception as e:
             logger.error(f"수면 계획 조회 오류: {e}")
             raise
@@ -197,8 +221,10 @@ class AIService:
         """카페인 계획 조회"""
         try:
             query = """
-            SELECT id, user_id, plan_date, cutoff_time, max_intake_mg, 
-                   recommendations, alternative_methods, created_at, updated_at
+            SELECT id, user_id, plan_date, 
+                   TO_CHAR(cutoff_time, 'HH24:MI') as cutoff_time,
+                   max_intake_mg, recommendations, alternative_methods, 
+                   created_at, updated_at
             FROM caffeine_plans 
             WHERE user_id = %s AND plan_date = %s
             """
@@ -293,9 +319,12 @@ def lambda_handler(event, context):
     try:
         logger.info(f"이벤트 수신: {json.dumps(event)}")
         
-        # HTTP 메서드 및 경로 추출
-        http_method = event.get('httpMethod', '')
-        path = event.get('path', '')
+        # HTTP 메서드 및 경로 추출 (API Gateway v2 형식 지원)
+        http_method = event.get('requestContext', {}).get('http', {}).get('method', event.get('httpMethod', ''))
+        raw_path = event.get('rawPath', event.get('path', ''))
+        
+        # /prod 접두사 제거 (API Gateway stage)
+        path = raw_path.replace('/prod', '', 1) if raw_path.startswith('/prod') else raw_path
         
         # CORS preflight 처리
         if http_method == 'OPTIONS':

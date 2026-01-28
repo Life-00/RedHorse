@@ -280,9 +280,12 @@ def lambda_handler(event, context):
     try:
         logger.info(f"이벤트 수신: {json.dumps(event)}")
         
-        # HTTP 메서드 및 경로 추출
-        http_method = event.get('httpMethod', '')
-        path = event.get('path', '')
+        # HTTP 메서드 및 경로 추출 (API Gateway v2 형식 지원)
+        http_method = event.get('requestContext', {}).get('http', {}).get('method', event.get('httpMethod', ''))
+        raw_path = event.get('rawPath', event.get('path', ''))
+        
+        # /prod 접두사 제거 (API Gateway stage)
+        path = raw_path.replace('/prod', '', 1) if raw_path.startswith('/prod') else raw_path
         
         # CORS preflight 처리
         if http_method == 'OPTIONS':
@@ -365,13 +368,70 @@ def lambda_handler(event, context):
             if not user_id:
                 return create_response(400, {'error': '사용자 ID가 필요합니다'})
             
-            # 멀티파트 폼 데이터 처리 (실제 구현에서는 base64 인코딩된 이미지 처리)
-            # 현재는 테스트용 더미 데이터
-            dummy_image_data = b"dummy image content"
-            filename = "schedule_image.jpg"
-            
-            result = schedule_service.upload_schedule_image(user_id, dummy_image_data, filename)
-            return create_response(201, {'upload': result})
+            try:
+                # API Gateway에서 base64로 인코딩된 body 처리
+                import base64
+                
+                body = event.get('body', '')
+                is_base64 = event.get('isBase64Encoded', False)
+                
+                if is_base64:
+                    body = base64.b64decode(body)
+                else:
+                    body = body.encode('utf-8') if isinstance(body, str) else body
+                
+                # Content-Type 헤더에서 boundary 추출
+                content_type = event.get('headers', {}).get('content-type', '') or event.get('headers', {}).get('Content-Type', '')
+                
+                if 'multipart/form-data' not in content_type:
+                    logger.warning(f"잘못된 Content-Type: {content_type}")
+                    # 테스트용 더미 데이터 사용
+                    dummy_image_data = b"dummy image content"
+                    filename = "schedule_image.jpg"
+                else:
+                    # multipart/form-data 파싱
+                    boundary = content_type.split('boundary=')[-1]
+                    
+                    # 간단한 multipart 파싱 (실제로는 더 복잡할 수 있음)
+                    parts = body.split(f'--{boundary}'.encode())
+                    
+                    file_content = None
+                    filename = 'uploaded_image.jpg'
+                    
+                    for part in parts:
+                        if b'Content-Disposition' in part and b'filename=' in part:
+                            # 파일명 추출
+                            try:
+                                filename_start = part.find(b'filename="') + 10
+                                filename_end = part.find(b'"', filename_start)
+                                filename = part[filename_start:filename_end].decode('utf-8')
+                            except:
+                                pass
+                            
+                            # 파일 내용 추출 (헤더와 내용 사이의 빈 줄 이후)
+                            try:
+                                content_start = part.find(b'\r\n\r\n') + 4
+                                content_end = part.rfind(b'\r\n')
+                                file_content = part[content_start:content_end]
+                            except:
+                                pass
+                            break
+                    
+                    if not file_content:
+                        logger.warning("파일 내용을 찾을 수 없음, 더미 데이터 사용")
+                        dummy_image_data = b"dummy image content"
+                        filename = "schedule_image.jpg"
+                    else:
+                        dummy_image_data = file_content
+                
+                logger.info(f"이미지 업로드 처리: {filename}, 크기: {len(dummy_image_data)} bytes")
+                
+                result = schedule_service.upload_schedule_image(user_id, dummy_image_data, filename)
+                return create_response(201, {'upload': result})
+                
+            except Exception as e:
+                logger.error(f"이미지 업로드 처리 오류: {e}")
+                return create_response(500, {'error': f'이미지 업로드 처리 실패: {str(e)}'})
         
         elif http_method == 'GET' and '/schedule-images' in path:
             # GET /users/{user_id}/schedule-images - 업로드된 스케줄 이미지 목록

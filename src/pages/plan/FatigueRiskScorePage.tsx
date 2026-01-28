@@ -203,9 +203,7 @@ export default function FatigueRiskScorePage({ onNavigate }: Props) {
         </div>
       </div>
 
-      <div className="shrink-0">
-        <BottomNav active="plan" onNavigate={onNavigate} />
-      </div>
+      <BottomNav active="plan" onNavigate={onNavigate} />
     </div>
   );
 }

@@ -485,9 +485,7 @@ export default function RelaxationHubPage({ onNavigate }: Props) {
         </div>
       </div>
 
-      <div className="shrink-0">
-        <BottomNav active="wellness" onNavigate={onNavigate} />
-      </div>
+      <BottomNav active="wellness" onNavigate={onNavigate} />
     </div>
   );
 }

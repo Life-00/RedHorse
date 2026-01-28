@@ -49,11 +49,11 @@ CREATE TABLE sleep_plans (
     id SERIAL PRIMARY KEY,
     user_id VARCHAR(255) NOT NULL,
     plan_date DATE NOT NULL,
-    main_sleep_start TIME NOT NULL,
-    main_sleep_end TIME NOT NULL,
+    main_sleep_start TIMESTAMP WITH TIME ZONE NOT NULL,
+    main_sleep_end TIMESTAMP WITH TIME ZONE NOT NULL,
     main_sleep_duration INTEGER NOT NULL, -- 분 단위
-    nap_start TIME,
-    nap_end TIME,
+    nap_start TIMESTAMP WITH TIME ZONE,
+    nap_end TIMESTAMP WITH TIME ZONE,
     nap_duration INTEGER, -- 분 단위
     rationale TEXT, -- AI가 생성한 근거 설명
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

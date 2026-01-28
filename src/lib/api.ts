@@ -146,8 +146,30 @@ export const scheduleApi = {
     apiClient.delete<{ message: string }>(`/users/${userId}/schedules/${scheduleId}`),
   
   // 스케줄 이미지 업로드
-  uploadScheduleImage: (userId: string) => 
-    apiClient.post<{ upload: any }>(`/users/${userId}/schedule-images`),
+  uploadScheduleImage: async (userId: string, file: File) => {
+    const session = await fetchAuthSession();
+    const token = session.tokens?.idToken?.toString();
+    
+    // FormData 생성
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch(`${API_BASE_URL}/users/${userId}/schedule-images`, {
+      method: 'POST',
+      headers: {
+        ...(token && { 'Authorization': `Bearer ${token}` })
+        // Content-Type은 자동으로 설정됨 (multipart/form-data)
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  },
   
   // 업로드된 이미지 목록 조회
   getScheduleImages: (userId: string) => 
