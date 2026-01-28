@@ -1,153 +1,172 @@
-// src/pages/home/HomeDashboard.tsx
-import { motion } from "framer-motion";
-import {
-  Moon,
-  Zap,
-  ChevronRight,
-  Clock,
-  Coffee,
-  AlertTriangle,
-  CheckCircle2,
-  Circle,
-  LogOut,
-} from "lucide-react";
+// src/pages/home/HomeDashboardLoggedOut.tsx
+import { Moon, Sun, Calendar, TrendingUp, Shield, Zap, CheckCircle2, ArrowRight } from 'lucide-react';
+import MobileFrame from '../../components/layout/MobileFrame';
+import BottomNav from '../../components/layout/BottomNav';
 import type { ScreenType } from "../../types/app";
-import BottomNav from "../../components/layout/BottomNav";
-import RiskBadge from "../../components/shared/RiskBadge";
-import { authSignOut } from "../../lib/auth";
 
 type Props = {
   onNavigate: (s: ScreenType) => void;
-  onLogoutDone: () => void;
 };
 
-export default function HomeDashboard({ onNavigate, onLogoutDone }: Props) {
-  const handleLogout = async () => {
-    try {
-      await authSignOut(); // ✅ Cognito 세션 로그아웃
-    } finally {
-      onLogoutDone(); // ✅ 화면 전환
-    }
-  };
+export default function HomeDashboardLoggedOut({ onNavigate }: Props) {
+  const features = [
+    {
+      icon: Moon,
+      title: '수면 최적화',
+      description: '근무에 맞춘 수면 창 제안',
+      color: 'from-indigo-500 to-purple-600',
+      bgColor: 'bg-indigo-50',
+      iconColor: 'text-indigo-600',
+    },
+    {
+      icon: Zap,
+      title: '카페인 관리',
+      description: '마지막 섭취 시간 계산',
+      color: 'from-amber-400 to-orange-500',
+      bgColor: 'bg-amber-50',
+      iconColor: 'text-amber-600',
+    },
+    {
+      icon: Shield,
+      title: '피로도 평가',
+      description: '안전사고 위험도 측정',
+      color: 'from-rose-400 to-pink-500',
+      bgColor: 'bg-rose-50',
+      iconColor: 'text-rose-600',
+    },
+  ];
+
+  const benefits = [
+    '과학적 근거 기반 생체리듬 최적화',
+    '교대근무자 맞춤 수면/식사 플랜',
+    '웨어러블 연동 수면 품질 분석',
+    '명상 & 이완 프로그램 제공',
+  ];
 
   return (
-    <div className="h-full flex flex-col bg-[#F8F9FD]">
-      <div className="px-7 pt-4 pb-6 bg-white rounded-b-[32px] shadow-sm">
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <div className="text-gray-400 text-[12px] font-black mb-1 uppercase tracking-widest">
-              2026. 01. 27 TUE
+    
+      <div className="h-full flex flex-col">
+        {/* Hero Section */}
+        <div className="px-6 pt-6 pb-8 bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
+          <div className="mb-6">
+            <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mb-4">
+              <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
             </div>
-            <h1 className="text-[26px] font-black tracking-tight">안녕하세요, 지연님</h1>
+            <h1 className="text-3xl font-semibold mb-3">
+              교대근무의<br />새로운 기준
+            </h1>
+            <p className="text-indigo-100 text-sm">
+              과학적 근거로 당신의 생체리듬을 최적화합니다
+            </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* 로그아웃(임시 위치: 상단) */}
-            <button
-              onClick={handleLogout}
-              className="p-3 rounded-2xl bg-gray-50 hover:bg-gray-100 text-gray-700"
-              aria-label="로그아웃"
-              title="로그아웃"
+          {/* CTA Buttons */}
+          <div className="space-y-3">
+            <button 
+              onClick={() => onNavigate("signup")}
+              className="w-full bg-white text-indigo-600 py-3 rounded-full font-medium shadow-lg hover:shadow-xl transition-shadow flex items-center justify-center gap-2"
             >
-              <LogOut className="w-5 h-5" />
+              <span>무료로 시작하기</span>
+              <ArrowRight className="w-5 h-5" />
             </button>
-
-            {/* 프로필 이동 */}
-            <button
-              onClick={() => onNavigate("profile")}
-              className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-2xl shadow-inner hover:bg-gray-100"
-              aria-label="프로필"
-              title="프로필"
+            <button 
+              onClick={() => onNavigate("login")}
+              className="w-full bg-white/20 backdrop-blur-sm text-white py-3 rounded-full font-medium border border-white/30 hover:bg-white/30 transition-colors"
             >
-              👤
+              로그인
             </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-4 p-4 bg-[#F8F7FF] rounded-[24px] border border-indigo-50 shadow-sm">
-          <div className="w-11 h-11 bg-[#5843E4] rounded-2xl flex items-center justify-center shadow-lg shadow-[#5843E4]/20">
-            <Moon className="w-5 h-5 text-white" />
-          </div>
-          <div className="flex-1">
-            <div className="text-[15px] font-black text-gray-900">오늘의 스케줄: 야간</div>
-            <div className="text-[12px] text-gray-400 font-bold">22:00 – 07:00 근무 예정</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 px-7 pt-7 space-y-5 overflow-y-auto pb-36">
-        <motion.div
-          whileTap={{ scale: 0.98 }}
-          className="bg-gradient-to-br from-[#5843E4] to-[#7D6DF2] rounded-[32px] p-7 text-white shadow-2xl shadow-[#5843E4]/30"
-        >
-          <div className="flex justify-between items-start mb-6">
-            <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center">
-              <Zap className="w-6 h-6" />
-            </div>
-            <div className="text-[11px] font-black px-3 py-1.5 bg-white/20 rounded-full backdrop-blur-md">
-              OPTIMIZER
-            </div>
-          </div>
-          <div className="text-[14px] opacity-80 font-bold mb-1">권장 수면창</div>
-          <div className="text-[30px] font-black mb-6 tracking-tight">08:00 – 15:30</div>
-          <div className="h-[1px] bg-white/20 mb-6" />
-          <div className="flex justify-between items-center text-[13.5px] font-black">
-            <div className="flex items-center gap-2.5">
-              <Clock className="w-4 h-4 opacity-70" />
-              <span>7.5시간 숙면 목표</span>
-            </div>
-            <ChevronRight className="w-5 h-5 opacity-70" />
-          </div>
-        </motion.div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-white p-5 rounded-[30px] shadow-sm border border-gray-50">
-            <div className="w-10 h-10 bg-amber-50 rounded-2xl flex items-center justify-center mb-4">
-              <Coffee className="w-5 h-5 text-amber-600" />
-            </div>
-            <div className="text-[12px] text-gray-400 font-black mb-1">카페인 컷오프</div>
-            <div className="text-[18px] font-black text-gray-900">21:00 이전</div>
+        {/* Features */}
+        <div className="flex-1 px-6 py-6 overflow-y-auto pb-32">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">핵심 기능</h2>
+          <div className="space-y-3 mb-8">
+            {features.map((feature) => {
+              const Icon = feature.icon;
+              return (
+                <div
+                  key={feature.title}
+                  className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`w-14 h-14 ${feature.bgColor} rounded-2xl flex items-center justify-center flex-shrink-0`}>
+                      <Icon className={`w-7 h-7 ${feature.iconColor}`} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900 mb-1">{feature.title}</div>
+                      <div className="text-sm text-gray-500">{feature.description}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
-          <div className="bg-white p-5 rounded-[30px] shadow-sm border border-gray-50">
-            <div className="w-10 h-10 bg-rose-50 rounded-2xl flex items-center justify-center mb-4">
-              <AlertTriangle className="w-5 h-5 text-rose-600" />
-            </div>
-            <div className="text-[12px] text-gray-400 font-black mb-1">피로 위험도</div>
-            <div className="flex items-center gap-2">
-              <div className="text-[18px] font-black text-gray-900">중간</div>
-              <RiskBadge level="medium" />
+          {/* Benefits */}
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">이런 점이 좋아요</h2>
+          <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-5 mb-8">
+            <div className="space-y-3">
+              {benefits.map((benefit, idx) => (
+                <div key={idx} className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-indigo-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-sm text-gray-700">{benefit}</span>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
 
-        <div className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-50">
-          <h3 className="text-[16px] font-black mb-5 tracking-tight">오늘의 체크리스트</h3>
-          <div className="space-y-3.5">
-            {[
-              { text: "메인 수면 7시간 달성", done: true },
-              { text: "퇴근 시 선글라스 착용", done: false },
-              { text: "근무 전 카페인 섭취", done: false },
-            ].map((item, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-4 p-4 bg-gray-50/50 rounded-2xl border border-gray-100/50"
-              >
-                {item.done ? (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                ) : (
-                  <Circle className="w-5 h-5 text-gray-200" />
-                )}
-                <span className={`text-[14px] font-bold ${item.done ? "text-gray-300 line-through" : "text-gray-600"}`}>
-                  {item.text}
-                </span>
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-3 mb-8">
+            <div className="bg-white rounded-2xl p-4 text-center border border-gray-100 shadow-sm">
+              <div className="text-2xl font-semibold text-indigo-600 mb-1">95%</div>
+              <div className="text-xs text-gray-600">수면 개선</div>
+            </div>
+            <div className="bg-white rounded-2xl p-4 text-center border border-gray-100 shadow-sm">
+              <div className="text-2xl font-semibold text-indigo-600 mb-1">12K+</div>
+              <div className="text-xs text-gray-600">활성 사용자</div>
+            </div>
+            <div className="bg-white rounded-2xl p-4 text-center border border-gray-100 shadow-sm">
+              <div className="text-2xl font-semibold text-indigo-600 mb-1">4.8</div>
+              <div className="text-xs text-gray-600">앱 평점</div>
+            </div>
+          </div>
+
+          {/* Testimonial */}
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+            <div className="flex items-start gap-3 mb-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+                김
               </div>
-            ))}
+              <div>
+                <div className="font-medium text-gray-900">김민지</div>
+                <div className="text-xs text-gray-500">간호사, 3년차</div>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              "야간 근무 후 낮잠 타이밍을 제대로 못 잡아서 힘들었는데, 이 앱 덕분에 수면 패턴이 안정되었어요. 피로감이 확실히 줄었습니다."
+            </p>
+          </div>
+
+          {/* Final CTA */}
+          <div className="mt-8 text-center">
+            <button 
+              onClick={() => onNavigate("signup")}
+              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-4 rounded-full font-medium shadow-lg hover:shadow-xl transition-shadow"
+            >
+              지금 무료로 시작하기
+            </button>
+            <p className="text-xs text-gray-500 mt-3">
+              신용카드 등록 불필요 • 언제든 취소 가능
+            </p>
           </div>
         </div>
-      </div>
 
-      <BottomNav active="home" onNavigate={onNavigate} />
-    </div>
+        {/* Bottom Navigation */}
+        <BottomNav active="home" onNavigate={onNavigate} />
+      </div>
+    
   );
 }

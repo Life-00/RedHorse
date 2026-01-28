@@ -5,7 +5,6 @@ export type ScreenType =
   | "home-loggedout"
   | "login"
   | "signup"
-  | "confirm"
   | "wellness"
   | "schedule"
   | "plan"

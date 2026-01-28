@@ -1,11 +1,14 @@
 // src/pages/schedule/SchedulePage.tsx
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Calendar, Plus, Edit3 } from "lucide-react";
 import type { ScreenType } from "../../types/app";
 import BottomNav from "../../components/layout/BottomNav";
 import TopBar from "../../components/layout/TopBar";
 import ScheduleRegisterModal, { type ShiftType } from "../../components/schedule/ScheduleRegisterModal";
+import { scheduleApi, apiUtils } from "../../lib/api";
+import { useCurrentUser } from "../../hooks/useApi";
+import type { Schedule } from "../../types/api";
 
 const SHIFT_CONFIG: Record<
   ShiftType,
@@ -103,6 +106,8 @@ function buildMonthCellsSundayStart(year: number, month0: number) {
 }
 
 export default function SchedulePage({ onNavigate }: Props) {
+  const { userId, loading: userLoading } = useCurrentUser();
+  
   // ✅ 달력 요일: 일~토 (참고 코드)
   const monthDayLabels = useMemo(() => ["일", "월", "화", "수", "목", "금", "토"], []);
   // ✅ 주간 카드 요일: 월~일 (기존 로직 유지)
@@ -110,56 +115,58 @@ export default function SchedulePage({ onNavigate }: Props) {
 
   const [cursor, setCursor] = useState(() => new Date(2026, 0, 1));
   const [selectedDate, setSelectedDate] = useState(() => new Date(2026, 0, 27));
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // 샘플 shiftMap (원하면 서버/스토리지로 대체)
-  const [shiftMap, setShiftMap] = useState<Record<string, ShiftType>>(() => {
-    const base: Record<string, ShiftType> = {};
-    const y = 2026;
-    const m = 0;
+  // 스케줄 데이터 로드
+  useEffect(() => {
+    if (!userId || userLoading) return;
 
-    // (예시) 1월 전체 일부만 찍어둠 - 필요하면 확장
-    const preset: Record<number, ShiftType> = {
-      1: "day",
-      2: "day",
-      3: "off",
-      4: "off",
-      5: "night",
-      6: "night",
-      7: "night",
-      8: "off",
-      9: "day",
-      10: "day",
-      11: "off",
-      12: "evening",
-      13: "evening",
-      14: "night",
-      15: "night",
-      16: "off",
-      17: "off",
-      18: "day",
-      19: "day",
-      20: "day",
-      21: "off",
-      22: "night",
-      23: "night",
-      24: "night",
-      25: "off",
-      26: "off",
-      27: "night",
-      28: "night",
-      29: "day",
-      30: "day",
-      31: "off",
+    const loadSchedules = async () => {
+      try {
+        setLoading(true);
+        
+        // 데이터베이스에서 스케줄 로드
+        try {
+          const year = cursor.getFullYear();
+          const month = cursor.getMonth();
+          const startDate = new Date(year, month, 1);
+          const endDate = new Date(year, month + 1, 0);
+          
+          const response = await scheduleApi.getSchedules(
+            userId,
+            apiUtils.formatDate(startDate),
+            apiUtils.formatDate(endDate)
+          );
+          
+          console.log('✅ 데이터베이스 스케줄 로드 성공:', response.schedules);
+          setSchedules(response.schedules || []);
+          
+        } catch (apiError) {
+          console.warn('⚠️ 백엔드 스케줄 로드 실패:', apiError);
+          setSchedules([]);
+        }
+        
+      } catch (error) {
+        console.error('❌ 스케줄 로드 실패:', error);
+        setSchedules([]);
+      } finally {
+        setLoading(false);
+      }
     };
 
-    Object.entries(preset).forEach(([dayStr, shift]) => {
-      const d = new Date(y, m, Number(dayStr));
-      d.setHours(0, 0, 0, 0);
-      base[dateKey(d)] = shift;
-    });
+    loadSchedules();
+  }, [userId, userLoading, cursor]);
 
-    return base;
-  });
+  // 스케줄 맵 생성 (날짜 키로 스케줄 매핑)
+  const shiftMap = useMemo(() => {
+    const map: Record<string, ShiftType> = {};
+    schedules.forEach(schedule => {
+      const key = schedule.work_date;
+      map[key] = schedule.shift_type as ShiftType;
+    });
+    return map;
+  }, [schedules]);
 
   const year = cursor.getFullYear();
   const month0 = cursor.getMonth();
@@ -184,40 +191,149 @@ export default function SchedulePage({ onNavigate }: Props) {
   // 등록 모달
   const [registerOpen, setRegisterOpen] = useState(false);
 
-  const applyRange = (payload: { start: string; end: string; shift: ShiftType }) => {
-    const startD = new Date(payload.start);
-    const endD = new Date(payload.end);
-    startD.setHours(0, 0, 0, 0);
-    endD.setHours(0, 0, 0, 0);
-    if (Number.isNaN(startD.getTime()) || Number.isNaN(endD.getTime())) return;
+  const applyRange = async (payload: { start: string; end: string; shift: ShiftType }) => {
+    if (!userId) return;
 
-    setShiftMap((prev) => {
-      const next = { ...prev };
-      const cur = new Date(startD);
-      while (cur <= endD) {
-        next[dateKey(cur)] = payload.shift;
-        cur.setDate(cur.getDate() + 1);
+    try {
+      const startD = new Date(payload.start);
+      const endD = new Date(payload.end);
+      startD.setHours(0, 0, 0, 0);
+      endD.setHours(0, 0, 0, 0);
+      
+      if (Number.isNaN(startD.getTime()) || Number.isNaN(endD.getTime())) return;
+
+      console.log('🔍 스케줄 등록 시작:', { userId, payload });
+
+      // 데이터베이스에 스케줄 저장
+      try {
+        const promises = [];
+        const cur = new Date(startD);
+        
+        while (cur <= endD) {
+          const dateStr = apiUtils.formatDate(cur);
+          
+          // 기존 스케줄이 있는지 확인
+          const existingSchedule = schedules.find(s => s.work_date === dateStr);
+          
+          if (existingSchedule) {
+            // 업데이트
+            promises.push(
+              scheduleApi.updateSchedule(userId, existingSchedule.id, {
+                shift_type: payload.shift,
+                work_date: dateStr
+              })
+            );
+          } else {
+            // 새로 생성
+            promises.push(
+              scheduleApi.createSchedule(userId, {
+                work_date: dateStr,
+                shift_type: payload.shift
+              })
+            );
+          }
+          
+          cur.setDate(cur.getDate() + 1);
+        }
+
+        await Promise.all(promises);
+        console.log('✅ 데이터베이스에 스케줄 저장 성공');
+        
+        // 저장 후 다시 로드
+        const year = cursor.getFullYear();
+        const month = cursor.getMonth();
+        const monthStart = new Date(year, month, 1);
+        const monthEnd = new Date(year, month + 1, 0);
+        
+        const response = await scheduleApi.getSchedules(
+          userId,
+          apiUtils.formatDate(monthStart),
+          apiUtils.formatDate(monthEnd)
+        );
+        
+        setSchedules(response.schedules || []);
+        setSelectedDate(startD);
+        setCursor(new Date(startD.getFullYear(), startD.getMonth(), 1));
+        
+      } catch (apiError) {
+        console.error('❌ 데이터베이스 저장 실패:', apiError);
+        alert('스케줄 등록에 실패했습니다.');
       }
-      return next;
-    });
-
-    setSelectedDate(startD);
-    setCursor(new Date(startD.getFullYear(), startD.getMonth(), 1));
+      
+    } catch (error) {
+      console.error('❌ 스케줄 등록 실패:', error);
+      alert('스케줄 등록에 실패했습니다.');
+    }
   };
 
   const uploadImage = async (file: File) => {
-    console.log("schedule image selected:", file);
+    if (!userId) return;
+    
+    try {
+      console.log("schedule image selected:", file);
+      // TODO: 실제 이미지 업로드 구현
+      const response = await scheduleApi.uploadScheduleImage(userId);
+      console.log('이미지 업로드 응답:', response);
+    } catch (error) {
+      console.error('이미지 업로드 실패:', error);
+    }
   };
 
   // (간단) 수정 버튼 누르면 근무 타입 순환
   const cycleShift = (current: ShiftType): ShiftType =>
     current === "day" ? "evening" : current === "evening" ? "night" : current === "night" ? "off" : "day";
 
-  const toggleShiftForDate = (d: Date) => {
-    const key = dateKey(d);
-    const current = shiftMap[key] ?? "off";
-    const next = cycleShift(current);
-    setShiftMap((prev) => ({ ...prev, [key]: next }));
+  const toggleShiftForDate = async (d: Date) => {
+    if (!userId) return;
+    
+    try {
+      const dateStr = apiUtils.formatDate(d);
+      const current = shiftMap[dateStr] ?? "off";
+      const next = cycleShift(current);
+      
+      console.log('🔍 스케줄 수정:', { dateStr, current, next });
+      
+      // 데이터베이스에 스케줄 업데이트
+      try {
+        const existingSchedule = schedules.find(s => s.work_date === dateStr);
+        
+        if (existingSchedule) {
+          // 업데이트
+          await scheduleApi.updateSchedule(userId, existingSchedule.id, {
+            shift_type: next,
+            work_date: dateStr
+          });
+        } else {
+          // 새로 생성
+          await scheduleApi.createSchedule(userId, {
+            work_date: dateStr,
+            shift_type: next
+          });
+        }
+        
+        console.log('✅ 데이터베이스 스케줄 수정 성공');
+        
+        // 수정 후 다시 로드
+        const year = cursor.getFullYear();
+        const month = cursor.getMonth();
+        const monthStart = new Date(year, month, 1);
+        const monthEnd = new Date(year, month + 1, 0);
+        
+        const response = await scheduleApi.getSchedules(
+          userId,
+          apiUtils.formatDate(monthStart),
+          apiUtils.formatDate(monthEnd)
+        );
+        
+        setSchedules(response.schedules || []);
+        
+      } catch (apiError) {
+        console.error('❌ 데이터베이스 수정 실패:', apiError);
+      }
+      
+    } catch (error) {
+      console.error('❌ 스케줄 수정 실패:', error);
+    }
   };
 
   const weekRangeText = useMemo(() => {
@@ -226,6 +342,21 @@ export default function SchedulePage({ onNavigate }: Props) {
       selectedWeekStart.getDate()
     )} ~ ${end.getFullYear()}-${pad2(end.getMonth() + 1)}-${pad2(end.getDate())}`;
   }, [selectedWeekStart]);
+
+  // 로딩 상태
+  if (userLoading || loading) {
+    return (
+      <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden relative">
+        <TopBar title="근무표" onNavigate={onNavigate} backTo="home" />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <div className="text-gray-600 font-bold">스케줄을 불러오는 중...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden relative">

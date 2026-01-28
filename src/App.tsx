@@ -13,7 +13,6 @@ import HomeDashboardLoggedOut from "./pages/home/HomeDashboardLoggedOut";
 
 import LoginScreen from "./pages/auth/LoginScreen";
 import SignUpScreen from "./pages/auth/SignUpScreen";
-import ConfirmSignUpScreen from "./pages/auth/ConfirmSignUpScreen";
 
 import WellnessPage from "./pages/wellness/WellnessPage";
 import SchedulePage from "./pages/schedule/SchedulePage";
@@ -26,18 +25,20 @@ import FatigueRiskScorePage from "./pages/plan/FatigueRiskScorePage";
 import DailyJumpstartPage from "./pages/plan/DailyJumpstartPage";
 
 import { authIsSignedIn } from "./lib/auth";
+import { fetchAuthSession } from "aws-amplify/auth";
+import { userApi } from "./lib/api";
 
-const AUTHPAGES: ScreenType[] = ["login", "signup", "confirm"];
+const AUTHPAGES: ScreenType[] = ["login", "signup"];
 
 export default function App() {
-  const [screen, setScreen] = useState<ScreenType>("onboarding-1");
+  const [screen, setScreen] = useState<ScreenType>("home-loggedout"); // 초기 화면을 로그아웃 홈으로 변경
   const [isAuthed, setIsAuthed] = useState(false);
 
   const [prefs, setPrefs] = useState<UserPreferences>({
     workType: "",
     commuteTime: 30,
     wearableDevice: "",
-    onboardingCompleted: false,
+    onboardingCompleted: false, // 기본값을 다시 false로 복원
   });
 
   const [pendingEmail, setPendingEmail] = useState("");
@@ -58,9 +59,6 @@ export default function App() {
   // 로그인 상태 체크 + 초기 라우팅
   useEffect(() => {
     (async () => {
-      // 온보딩 미완료면 온보딩 화면 유지
-      if (!prefs.onboardingCompleted) return;
-
       let ok = false;
       try {
         ok = await authIsSignedIn();
@@ -73,10 +71,20 @@ export default function App() {
       // auth 페이지(로그인/회원가입/인증)는 사용자가 들어간 상태 유지
       if (AUTHPAGES.includes(screen)) return;
 
-      // ✅ 홈/홈-로그아웃이 아닌 경우에는 현재 화면 유지 (UX 보호)
-      if (screen !== "home" && screen !== "home-loggedout") return;
+      // ✅ 로그인 안된 상태면 항상 홈 로그아웃 화면
+      if (!ok) {
+        setScreen("home-loggedout");
+        return;
+      }
 
-      setScreen(ok ? "home" : "home-loggedout");
+      // ✅ 로그인 했는데 온보딩 미완료면 온보딩 화면
+      if (!prefs.onboardingCompleted) {
+        setScreen("onboarding-1");
+        return;
+      }
+
+      // ✅ 로그인 했고 온보딩 완료면 홈 대시보드
+      setScreen("home");
     })();
     // screen도 deps에 넣으면 auth페이지에서 다시 덮어쓸 수 있어서 의도적으로 제외
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -90,11 +98,53 @@ export default function App() {
 
   const handleOnboardingComplete = () => {
     updatePrefs({ onboardingCompleted: true });
-    setScreen("home-loggedout");
+    // 온보딩 완료 후 로그인 상태에 따라 적절한 화면으로 이동
+    setScreen(isAuthed ? "home" : "home-loggedout");
   };
 
-  const handleLoginSuccess = () => {
+  const handleLoginSuccess = async () => {
+    console.log('🔍 로그인 성공 - 사용자 동기화 시작');
     setIsAuthed(true);
+    
+    // 로그인 성공 후 데이터베이스에 사용자 정보 동기화
+    try {
+      const session = await fetchAuthSession();
+      console.log('🔍 Cognito 세션:', session);
+      const cognitoUser = session.tokens?.idToken?.payload;
+      console.log('🔍 Cognito 사용자 정보:', cognitoUser);
+      
+      if (cognitoUser) {
+        const userId = cognitoUser.sub as string;
+        const email = cognitoUser.email as string;
+        const name = cognitoUser.name as string;
+        
+        console.log('🔍 추출된 사용자 정보:', { userId, email, name });
+        
+        // 데이터베이스에 사용자 생성 또는 업데이트
+        try {
+          console.log('🔍 사용자 생성 API 호출 시작');
+          const result = await userApi.createProfile({
+            user_id: userId,
+            email: email,
+            name: name,
+            work_type: '2shift', // 기본값
+            commute_time: 30,
+            wearable_device: 'none',
+            onboarding_completed: false
+          });
+          console.log('✅ 사용자 생성 성공:', result);
+        } catch (error: any) {
+          console.log('❌ 사용자 생성 오류:', error);
+          // 사용자가 이미 존재하는 경우 무시
+          if (!error.message?.includes('already exists')) {
+            console.error('사용자 생성 실패:', error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ 사용자 동기화 실패:', error);
+    }
+    
     setScreen("home");
   };
 
@@ -103,12 +153,12 @@ export default function App() {
     setScreen("home-loggedout");
   };
 
-  // confirm에 email 없으면 signup으로 보내기(안전장치)
-  useEffect(() => {
-    if (screen === "confirm" && !pendingEmail) {
-      setScreen("signup");
-    }
-  }, [screen, pendingEmail]);
+  // confirm에 email 없으면 signup으로 보내기(안전장치) - 더 이상 필요 없음
+  // useEffect(() => {
+  //   if (screen === "confirm" && !pendingEmail) {
+  //     setScreen("signup");
+  //   }
+  // }, [screen, pendingEmail]);
 
   return (
     <MobileFrame>
@@ -155,17 +205,9 @@ export default function App() {
             <SignUpScreen
               onNavigate={setScreen}
               onSignedUp={(email) => {
+                // 회원가입 완료 후 로그인 화면으로 이동 (SignUpScreen에서 처리)
                 setPendingEmail(email);
-                setScreen("confirm");
               }}
-            />
-          )}
-
-          {screen === "confirm" && (
-            <ConfirmSignUpScreen
-              onNavigate={setScreen}
-              email={pendingEmail}
-              onConfirmed={() => setScreen("login")}
             />
           )}
 
@@ -173,7 +215,6 @@ export default function App() {
           {screen === "home" && (
             <HomeDashboard
               onNavigate={setScreen}
-              onLogoutDone={handleLogoutDone}
             />
           )}
 
@@ -194,7 +235,7 @@ export default function App() {
           {screen === "profile" && (
             <ProfilePage
               onNavigate={setScreen}
-              onLogoutDone={handleLogoutDone}
+              onLogout={handleLogoutDone}
             />
           )}
 
