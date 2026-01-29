@@ -10,40 +10,38 @@ import {
 import type { ScreenType } from "../../types/app";
 import TopBar from "../../components/layout/TopBar";
 import BottomNav from "../../components/layout/BottomNav";
-import { jumpstartApi } from "../../lib/api";
-import { useCurrentUser, useToday } from "../../hooks/useApi";
-import type { JumpstartBlock, JumpstartTask } from "../../types/api";
+import { generateDummyJumpstart } from "../../utils/dummyData";
 
 type Props = {
   onNavigate: (s: ScreenType) => void;
 };
 
+// 더미 데이터 타입 정의
+type DummyTask = {
+  id: number;
+  task_name: string;
+  completed: boolean;
+};
+
+type DummyBlock = {
+  id: number;
+  block_type: string;
+  block_name: string;
+  duration_minutes: number;
+  tasks: DummyTask[];
+};
+
 export default function DailyJumpstartPage({ onNavigate }: Props) {
-  const { userId, loading: userLoading } = useCurrentUser();
-  const today = useToday();
-  
-  const [blocks, setBlocks] = useState<JumpstartBlock[]>([]);
+  const [blocks, setBlocks] = useState<DummyBlock[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 점프스타트 데이터 로드
+  // 더미 점프스타트 데이터 로드
   useEffect(() => {
-    if (!userId || userLoading) return;
-
-    const loadJumpstartData = async () => {
+    const loadJumpstartData = () => {
       try {
         setLoading(true);
-        
-        // 오늘의 점프스타트 조회
-        const response = await jumpstartApi.getDailyJumpstart(userId, today);
-        
-        if (response.jumpstart && response.jumpstart.blocks && response.jumpstart.blocks.length > 0) {
-          setBlocks(response.jumpstart.blocks);
-        } else {
-          // 점프스타트가 없으면 생성
-          const createResponse = await jumpstartApi.createDailyJumpstart(userId, today);
-          setBlocks(createResponse.jumpstart?.blocks || []);
-        }
-        
+        const dummyData = generateDummyJumpstart();
+        setBlocks(dummyData.blocks);
       } catch (error) {
         console.error('점프스타트 데이터 로드 실패:', error);
         setBlocks([]);
@@ -52,38 +50,26 @@ export default function DailyJumpstartPage({ onNavigate }: Props) {
       }
     };
 
-    loadJumpstartData();
-  }, [userId, userLoading, today]);
+    // 약간의 로딩 시뮬레이션
+    setTimeout(loadJumpstartData, 300);
+  }, []);
 
   // 작업 완료 상태 토글
-  const toggleTask = async (taskId: number, currentCompleted: boolean) => {
-    if (!userId) return;
-    
-    try {
-      await jumpstartApi.updateTaskCompletion(userId, taskId, !currentCompleted);
-      
-      // 로컬 상태 업데이트
-      setBlocks(prevBlocks => 
-        prevBlocks.map(block => ({
-          ...block,
-          tasks: block.tasks.map(task => 
-            task.id === taskId 
-              ? { ...task, completed: !currentCompleted }
-              : task
-          ),
-          completed_tasks: block.tasks.filter(task => 
-            task.id === taskId ? !currentCompleted : task.completed
-          ).length
-        }))
-      );
-      
-    } catch (error) {
-      console.error('작업 상태 업데이트 실패:', error);
-    }
+  const toggleTask = (taskId: number, currentCompleted: boolean) => {
+    setBlocks(prevBlocks => 
+      prevBlocks.map(block => ({
+        ...block,
+        tasks: block.tasks.map(task => 
+          task.id === taskId 
+            ? { ...task, completed: !currentCompleted }
+            : task
+        )
+      }))
+    );
   };
 
   // 로딩 상태
-  if (userLoading || loading) {
+  if (loading) {
     return (
       <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden relative">
         <TopBar title="오늘의 점프스타트" onNavigate={onNavigate} backTo="plan" />
@@ -131,7 +117,11 @@ export default function DailyJumpstartPage({ onNavigate }: Props) {
 
             const Icon = getIcon(block.block_type);
             const color = getColor(block.block_type);
-            const progress = block.total_tasks === 0 ? 0 : Math.round((block.completed_tasks / block.total_tasks) * 100);
+            
+            // 완료된 작업 수 계산
+            const completedTasks = block.tasks.filter(task => task.completed).length;
+            const totalTasks = block.tasks.length;
+            const progress = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 
             return (
               <div
@@ -157,7 +147,7 @@ export default function DailyJumpstartPage({ onNavigate }: Props) {
 
                     <div className="text-right">
                       <div className="text-xs opacity-90 font-bold">예상 시간</div>
-                      <div className="text-lg font-black">{block.total_duration}분</div>
+                      <div className="text-lg font-black">{block.duration_minutes}분</div>
                     </div>
                   </div>
 
@@ -169,7 +159,7 @@ export default function DailyJumpstartPage({ onNavigate }: Props) {
                     />
                   </div>
                   <div className="text-xs mt-2 opacity-90 font-bold">
-                    {block.completed_tasks} / {block.total_tasks} 완료
+                    {completedTasks} / {totalTasks} 완료
                   </div>
                 </div>
 
@@ -195,11 +185,6 @@ export default function DailyJumpstartPage({ onNavigate }: Props) {
                           ].join(" ")}
                         >
                           {task.task_name}
-                        </div>
-
-                        <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-1 font-bold">
-                          <Clock className="w-3 h-3" />
-                          {task.duration_minutes}분
                         </div>
                       </div>
                     </button>

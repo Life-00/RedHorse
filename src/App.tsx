@@ -234,7 +234,7 @@ export default function App() {
           {screen === "plan" && <PlanPage onNavigate={setScreen} />}
 
           {/* Plan sub pages */}
-          {screen === "fatigue-risk" && (
+          {screen === "fatigue-risk-score" && (
             <FatigueRiskScorePage onNavigate={setScreen} />
           )}
           {screen === "daily-jumpstart" && (
@@ -250,7 +250,7 @@ export default function App() {
           )}
 
           {/* Wellness sub pages */}
-          {screen === "caffeine" && (
+          {screen === "caffeine-cutoff" && (
             <CaffeineCutoffPage onNavigate={setScreen} />
           )}
           {screen === "relax" && <RelaxationHubPage onNavigate={setScreen} />}

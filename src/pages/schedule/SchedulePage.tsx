@@ -9,6 +9,7 @@ import ScheduleRegisterModal, { type ShiftType } from "../../components/schedule
 import { scheduleApi, apiUtils } from "../../lib/api";
 import { useCurrentUser } from "../../hooks/useApi";
 import type { Schedule } from "../../types/api";
+import { getAllowedShiftTypes } from "../../utils/shiftTypeUtils";
 
 const SHIFT_CONFIG: Record<
   ShiftType,
@@ -170,14 +171,26 @@ export default function SchedulePage({ onNavigate }: Props) {
   }, [userId, userLoading, cursor]);
 
   // 스케줄 맵 생성 (날짜 키로 스케줄 매핑)
+  // 허용되지 않은 교대 타입은 "off"로 변환
   const shiftMap = useMemo(() => {
     const map: Record<string, ShiftType> = {};
+    const allowedTypes = getAllowedShiftTypes(workType || 'irregular');
+    
     schedules.forEach(schedule => {
       const key = schedule.work_date;
-      map[key] = schedule.shift_type as ShiftType;
+      const shiftType = schedule.shift_type as ShiftType;
+      
+      // 허용된 타입인지 확인
+      if (allowedTypes.includes(shiftType)) {
+        map[key] = shiftType;
+      } else {
+        // 허용되지 않은 타입은 "off"로 변환
+        console.warn(`⚠️ ${key}: ${shiftType}는 ${workType}에서 허용되지 않는 타입입니다. "off"로 변환합니다.`);
+        map[key] = 'off';
+      }
     });
     return map;
-  }, [schedules]);
+  }, [schedules, workType]);
 
   const year = cursor.getFullYear();
   const month0 = cursor.getMonth();
@@ -398,9 +411,30 @@ export default function SchedulePage({ onNavigate }: Props) {
     }
   };
 
-  // (간단) 수정 버튼 누르면 근무 타입 순환
-  const cycleShift = (current: ShiftType): ShiftType =>
-    current === "day" ? "evening" : current === "evening" ? "night" : current === "night" ? "off" : "day";
+  // 근무 유형에 따른 범례 항목 필터링
+  const legendItems = useMemo(() => {
+    const allLegends = [
+      { type: 'day', color: 'bg-amber-400', label: '주간' },
+      { type: 'evening', color: 'bg-purple-500', label: '초저녁' },
+      { type: 'night', color: 'bg-indigo-500', label: '야간' },
+      { type: 'off', color: 'bg-gray-200', label: '휴무' }
+    ];
+
+    const allowedTypes = getAllowedShiftTypes(workType || 'irregular');
+    return allLegends.filter(legend => allowedTypes.includes(legend.type as ShiftType));
+  }, [workType]);
+
+  // 근무 타입 순환 (work_type 기반)
+  const cycleShift = useMemo(() => {
+    return (current: ShiftType): ShiftType => {
+      const allowedTypes = getAllowedShiftTypes(workType || 'irregular');
+      const currentIndex = allowedTypes.indexOf(current);
+      
+      // 다음 타입으로 순환 (마지막이면 첫 번째로)
+      const nextIndex = (currentIndex + 1) % allowedTypes.length;
+      return allowedTypes[nextIndex];
+    };
+  }, [workType]);
 
   const toggleShiftForDate = async (d: Date) => {
     if (!userId) return;
@@ -481,6 +515,7 @@ export default function SchedulePage({ onNavigate }: Props) {
     <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden">
       <TopBar
         title="근무표"
+        subtitle="나의 근무 일정 관리"
         onNavigate={onNavigate}
         backTo="home"
         rightSlot={
@@ -531,16 +566,12 @@ export default function SchedulePage({ onNavigate }: Props) {
                 const cfg = SHIFT_CONFIG[shift];
 
                 const isToday = key === dateKey(today);
-                const isSelected = key === dateKey(selectedDate);
 
                 return (
                   <button
                     key={key}
                     onClick={() => setSelectedDate(cell)}
-                    className={[
-                      "aspect-square rounded-xl flex flex-col items-center justify-center text-xs relative transition-all",
-                      isSelected ? "ring-2 ring-indigo-600 ring-offset-1" : "hover:bg-gray-50",
-                    ].join(" ")}
+                    className="aspect-square rounded-xl flex flex-col items-center justify-center text-xs relative transition-all hover:bg-gray-50"
                   >
                     {/* 오늘 표시 점 */}
                     {isToday && <div className="absolute -top-1 -right-1 w-2 h-2 bg-indigo-600 rounded-full" />}
@@ -559,22 +590,12 @@ export default function SchedulePage({ onNavigate }: Props) {
 
             {/* Legend */}
             <div className="flex items-center justify-center gap-4 mt-4 pt-3 border-t border-gray-100">
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-amber-400 rounded-full" />
-                <span className="text-xs text-gray-600">주간</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-indigo-500 rounded-full" />
-                <span className="text-xs text-gray-600">야간</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-purple-500 rounded-full" />
-                <span className="text-xs text-gray-600">초저녁</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-gray-200 rounded-full" />
-                <span className="text-xs text-gray-600">휴무</span>
-              </div>
+              {legendItems.map(item => (
+                <div key={item.type} className="flex items-center gap-1.5">
+                  <div className={`w-3 h-3 ${item.color} rounded-full`} />
+                  <span className="text-xs text-gray-600">{item.label}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>

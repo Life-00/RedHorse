@@ -84,8 +84,19 @@ export default function WellnessPage({
     <div className="h-full flex flex-col bg-[#F8F9FD]">
       {/* Header */}
       <div className="px-7 pt-6 pb-6 bg-white rounded-b-[32px] shadow-sm border-b border-gray-100">
-        <h1 className="text-[24px] font-black text-[#1A1A1A] mb-1">웰빙</h1>
-        <p className="text-[14px] text-gray-400 font-bold">
+        <div className="flex items-center gap-3 mb-1">
+          <button
+            onClick={() => onNavigate("home")}
+            className="flex items-center justify-center text-indigo-600 hover:text-indigo-700 active:scale-95 transition-all"
+            aria-label="뒤로가기"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <h1 className="text-[24px] font-black text-[#1A1A1A]">웰빙</h1>
+        </div>
+        <p className="text-[14px] text-gray-400 font-bold ml-9">
           컨디션을 올리는 오늘의 추천
         </p>
       </div>

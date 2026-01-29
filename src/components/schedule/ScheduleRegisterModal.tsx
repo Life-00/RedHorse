@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X, CalendarDays, ImageUp, Wand2 } from "lucide-react";
+import { getAllowedShiftTypes, SHIFT_TYPE_LABELS } from "../../utils/shiftTypeUtils";
 
 export type ShiftType = "day" | "evening" | "night" | "off";
 
@@ -53,29 +54,15 @@ export default function ScheduleRegisterModal({
   // 근무 형태에 따른 교대 유형 필터링
   const availableShifts = useMemo(() => {
     const allShifts = [
-      { id: "day" as const, label: "주간" },
-      { id: "evening" as const, label: "중간" },
-      { id: "night" as const, label: "야간" },
-      { id: "off" as const, label: "휴무" },
+      { id: "day" as const, label: SHIFT_TYPE_LABELS.day },
+      { id: "evening" as const, label: SHIFT_TYPE_LABELS.evening },
+      { id: "night" as const, label: SHIFT_TYPE_LABELS.night },
+      { id: "off" as const, label: SHIFT_TYPE_LABELS.off },
     ];
 
-    // 2교대: 주간, 야간, 휴무만
-    if (workType === '2shift' || workType === 'day') {
-      return allShifts.filter(s => s.id === 'day' || s.id === 'night' || s.id === 'off');
-    }
-    
-    // 3교대: 모든 교대 유형
-    if (workType === '3shift' || workType === 'evening') {
-      return allShifts;
-    }
-    
-    // 고정 야간: 야간, 휴무만
-    if (workType === 'fixed_night' || workType === 'night') {
-      return allShifts.filter(s => s.id === 'night' || s.id === 'off');
-    }
-    
-    // 불규칙 또는 기타: 모든 교대 유형
-    return allShifts;
+    // 근무 유형에 따라 허용된 교대 타입만 필터링
+    const allowedShiftTypes = getAllowedShiftTypes(workType || 'irregular');
+    return allShifts.filter(shift => allowedShiftTypes.includes(shift.id));
   }, [workType]);
 
   const canApply = start && end && new Date(start) <= new Date(end);

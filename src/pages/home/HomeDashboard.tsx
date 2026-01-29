@@ -21,6 +21,7 @@ import { fetchAuthSession } from "aws-amplify/auth";
 import { userApi, scheduleApi, aiApi, fatigueApi } from "../../lib/api";
 import { useCurrentUser, useToday } from "../../hooks/useApi";
 import type { UserProfile, Schedule, SleepPlan, FatigueAssessment } from "../../types/api";
+import { formatTimeToHHMM, SHIFT_TYPE_FULL_LABELS, getAllowedShiftTypes, isValidShiftType } from "../../utils/shiftTypeUtils";
 
 type Props = {
   onNavigate: (s: ScreenType) => void;
@@ -205,23 +206,30 @@ export default function HomeDashboard({ onNavigate }: Props) {
   const getScheduleInfo = () => {
     if (!todaySchedule) return { label: "휴무", time: "오늘은 쉬는 날입니다" };
     
-    const shiftLabels = {
-      day: "주간 근무",
-      evening: "초저녁 근무", 
-      night: "야간 근무",
-      off: "휴무"
-    };
-
-    const label = shiftLabels[todaySchedule.shift_type as keyof typeof shiftLabels] || "근무";
+    // 사용자의 work_type에 맞지 않는 shift_type 필터링
+    let effectiveShiftType = todaySchedule.shift_type;
+    if (userProfile && !isValidShiftType(userProfile.work_type, todaySchedule.shift_type)) {
+      console.warn(`⚠️ 홈 화면: ${todaySchedule.shift_type}는 ${userProfile.work_type}에서 허용되지 않는 타입입니다. "휴무"로 표시합니다.`);
+      effectiveShiftType = 'off';
+    }
     
-    // DB에서 가져온 실제 시간 사용
-    const time = todaySchedule.start_time && todaySchedule.end_time 
-      ? `${todaySchedule.start_time} – ${todaySchedule.end_time}`
-      : todaySchedule.shift_type === 'off' 
-        ? "오늘은 쉬는 날입니다"
-        : "시간 미정";
-
-    return { label, time };
+    // 교대 타입 레이블 가져오기
+    const label = SHIFT_TYPE_FULL_LABELS[effectiveShiftType as keyof typeof SHIFT_TYPE_FULL_LABELS] || "근무";
+    
+    // 휴무인 경우
+    if (effectiveShiftType === 'off') {
+      return { label, time: "오늘은 쉬는 날입니다" };
+    }
+    
+    // 시간 정보가 있는 경우 HH:MM 형식으로 포맷팅
+    if (todaySchedule.start_time && todaySchedule.end_time) {
+      const startTime = formatTimeToHHMM(todaySchedule.start_time);
+      const endTime = formatTimeToHHMM(todaySchedule.end_time);
+      return { label, time: `${startTime} ~ ${endTime}` };
+    }
+    
+    // 시간 정보가 없는 경우
+    return { label, time: "시간 미정" };
   };
 
   // 수면창 정보 포맷팅
@@ -303,16 +311,6 @@ export default function HomeDashboard({ onNavigate }: Props) {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* 로그아웃(임시 위치: 상단) */}
-            <button
-              onClick={handleLogout}
-              className="p-3 rounded-2xl bg-gray-50 hover:bg-gray-100 text-gray-700"
-              aria-label="로그아웃"
-              title="로그아웃"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
-
             {/* 프로필 이동 */}
             <button
               onClick={() => onNavigate("profile")}
@@ -340,38 +338,39 @@ export default function HomeDashboard({ onNavigate }: Props) {
         <div className="px-7 pt-7 space-y-5">
         <motion.div
           whileTap={{ scale: 0.98 }}
-          className="bg-gradient-to-br from-[#5843E4] to-[#7D6DF2] rounded-[32px] p-7 text-white shadow-2xl shadow-[#5843E4]/30"
+          onClick={() => onNavigate("plan")}
+          className="bg-gradient-to-br from-[#5843E4] to-[#7D6DF2] rounded-[32px] p-7 text-white shadow-2xl shadow-[#5843E4]/30 cursor-pointer"
         >
-          <div className="flex justify-between items-start mb-6">
-            <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center">
-              <Zap className="w-6 h-6" />
-            </div>
-            <div className="text-[11px] font-black px-3 py-1.5 bg-white/20 rounded-full backdrop-blur-md">
-              OPTIMIZER
-            </div>
-          </div>
           <div className="text-[14px] opacity-80 font-bold mb-1">권장 수면창</div>
           <div className="text-[30px] font-black mb-6 tracking-tight">{getSleepWindow()}</div>
           <div className="h-[1px] bg-white/20 mb-6" />
           <div className="flex justify-between items-center text-[13.5px] font-black">
             <div className="flex items-center gap-2.5">
               <Clock className="w-4 h-4 opacity-70" />
-              <span>{sleepPlan ? `${Math.round(sleepPlan.main_sleep_duration)}시간 숙면 목표` : '수면 계획을 생성해보세요'}</span>
+              <span>상세 플랜 보기</span>
             </div>
             <ChevronRight className="w-5 h-5 opacity-70" />
           </div>
         </motion.div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-white p-5 rounded-[30px] shadow-sm border border-gray-50">
+          <motion.div
+            whileTap={{ scale: 0.98 }}
+            onClick={() => onNavigate("caffeine-cutoff")}
+            className="bg-white p-5 rounded-[30px] shadow-sm border border-gray-50 cursor-pointer"
+          >
             <div className="w-10 h-10 bg-amber-50 rounded-2xl flex items-center justify-center mb-4">
               <Coffee className="w-5 h-5 text-amber-600" />
             </div>
             <div className="text-[12px] text-gray-400 font-black mb-1">카페인 컷오프</div>
             <div className="text-[18px] font-black text-gray-900">{getCaffeineDisplay()}</div>
-          </div>
+          </motion.div>
 
-          <div className="bg-white p-5 rounded-[30px] shadow-sm border border-gray-50">
+          <motion.div
+            whileTap={{ scale: 0.98 }}
+            onClick={() => onNavigate("fatigue-risk-score")}
+            className="bg-white p-5 rounded-[30px] shadow-sm border border-gray-50 cursor-pointer"
+          >
             <div className="w-10 h-10 bg-rose-50 rounded-2xl flex items-center justify-center mb-4">
               <AlertTriangle className="w-5 h-5 text-rose-600" />
             </div>
@@ -380,7 +379,7 @@ export default function HomeDashboard({ onNavigate }: Props) {
               <div className="text-[18px] font-black text-gray-900">{fatigueInfo.level}</div>
               <RiskBadge level={fatigueInfo.riskLevel} />
             </div>
-          </div>
+          </motion.div>
         </div>
 
           {/* 점프스타트 섹션 */}

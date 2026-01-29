@@ -100,8 +100,19 @@ export default function CaffeineCutoffPage({ onNavigate }: Props) {
       <div className="flex-1 overflow-y-auto pb-32">
         {/* Header 설명 */}
         <div className="px-7 pt-2 pb-6 border-b border-gray-100 bg-white">
-          <div className="text-[12px] font-black text-gray-400">수면 품질을 위한 마지막 허용 시각</div>
-          <div className="text-[20px] font-black text-gray-900 mt-1">카페인 컷오프</div>
+          <div className="flex items-center gap-3 mb-1">
+            <button
+              onClick={() => onNavigate("wellness")}
+              className="flex items-center justify-center text-indigo-600 hover:text-indigo-700 active:scale-95 transition-all"
+              aria-label="뒤로가기"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <div className="text-[20px] font-black text-gray-900">카페인 컷오프</div>
+          </div>
+          <div className="text-[12px] font-black text-gray-400 ml-9">수면 품질을 위한 마지막 허용 시각</div>
         </div>
 
         <div className="px-6 py-8">
@@ -118,29 +129,29 @@ export default function CaffeineCutoffPage({ onNavigate }: Props) {
               strokeWidth="20"
             />
 
-            {/* Safe zone */}
+            {/* Danger zone - 매우 연한 회색 (먹으면 안되는 시간, 끝이 각지게) - 먼저 그리기 */}
             <circle
               cx="100"
               cy="100"
               r="90"
               fill="none"
-              stroke="#10b981"
-              strokeWidth="20"
-              strokeDasharray={safeDash}
-              strokeLinecap="round"
-              transform="rotate(-90 100 100)"
-            />
-
-            {/* Danger zone */}
-            <circle
-              cx="100"
-              cy="100"
-              r="90"
-              fill="none"
-              stroke="#f59e0b"
+              stroke="#f3f4f6"
               strokeWidth="20"
               strokeDasharray={dangerDash}
               strokeDashoffset={dangerOffset}
+              strokeLinecap="butt"
+              transform="rotate(-90 100 100)"
+            />
+
+            {/* Safe zone - 주황색 (먹어도 되는 시간, 끝이 둥글게) - 나중에 그려서 위에 표시 */}
+            <circle
+              cx="100"
+              cy="100"
+              r="90"
+              fill="none"
+              stroke="#fb923c"
+              strokeWidth="20"
+              strokeDasharray={safeDash}
               strokeLinecap="round"
               transform="rotate(-90 100 100)"
             />

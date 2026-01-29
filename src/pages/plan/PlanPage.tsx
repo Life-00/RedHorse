@@ -104,11 +104,22 @@ export default function PlanPage({ onNavigate }: Props) {
      {/* Header (고정) */}
 <div className="shrink-0 px-7 pt-6 pb-6 bg-white shadow-sm border-b border-gray-100">
   <div className="flex items-start justify-between gap-4">
-    <div>
-      <h1 className="text-[24px] font-bold text-[#1A1A1A] mb-1">수면창 계획</h1>
-      <p className="text-[14px] text-[#8E8E8E] font-medium">
-        오늘의 최적화된 수면 시간표
-      </p>
+    <div className="flex items-center gap-3 flex-1">
+      <button
+        onClick={() => onNavigate("home")}
+        className="flex items-center justify-center text-indigo-600 hover:text-indigo-700 active:scale-95 transition-all"
+        aria-label="뒤로가기"
+      >
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <div>
+        <h1 className="text-[24px] font-bold text-[#1A1A1A] mb-1">수면창 계획</h1>
+        <p className="text-[14px] text-[#8E8E8E] font-medium">
+          오늘의 최적화된 수면 시간표
+        </p>
+      </div>
     </div>
   </div>
 </div>
@@ -183,7 +194,6 @@ export default function PlanPage({ onNavigate }: Props) {
                         </div>
                         <div className="space-y-2">
                           <div className="flex items-baseline gap-2">
-                            <span className="text-[11px] text-indigo-600 font-bold uppercase tracking-wide">권장 수면 시간</span>
                             <span className="text-[24px] font-black text-indigo-900 leading-none">
                               {Math.floor(sleepPlan.main_sleep_duration)}시간 {Math.round((sleepPlan.main_sleep_duration % 1) * 60)}분
                             </span>

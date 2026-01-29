@@ -13,6 +13,23 @@ import uuid
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+# 근무 유형별 허용 교대 타입 매핑
+WORK_TYPE_SHIFT_MAPPING = {
+    '2shift': ['day', 'night', 'off'],
+    '3shift': ['day', 'evening', 'night', 'off'],
+    'fixed_night': ['night', 'off'],
+    'irregular': ['day', 'evening', 'night', 'off']
+}
+
+def get_allowed_shift_types(work_type: str) -> List[str]:
+    """근무 유형에 따라 허용되는 교대 타입 반환"""
+    return WORK_TYPE_SHIFT_MAPPING.get(work_type, ['day', 'evening', 'night', 'off'])
+
+def validate_shift_type(work_type: str, shift_type: str) -> bool:
+    """교대 타입이 근무 유형에 맞는지 검증"""
+    allowed_types = get_allowed_shift_types(work_type)
+    return shift_type in allowed_types
+
 class DatabaseManager:
     def __init__(self):
         self.db_config = {
@@ -135,6 +152,27 @@ class ScheduleService:
     def create_schedule(self, user_id: str, schedule_data: Dict[str, Any]) -> Dict[str, Any]:
         """스케줄 생성 (UPSERT: 중복 시 업데이트)"""
         try:
+            # 1. 사용자의 work_type 조회
+            user_query = "SELECT work_type FROM users WHERE user_id = %s"
+            user_result = self.db.execute_query(user_query, (user_id,))
+            
+            if not user_result:
+                raise ValueError("사용자를 찾을 수 없습니다")
+            
+            work_type = user_result[0]['work_type']
+            shift_type = schedule_data['shift_type']
+            
+            # 2. shift_type 검증
+            if not validate_shift_type(work_type, shift_type):
+                allowed = get_allowed_shift_types(work_type)
+                error_msg = (
+                    f"{work_type} 근무 유형에서는 {shift_type} 교대를 사용할 수 없습니다. "
+                    f"허용된 교대: {', '.join(allowed)}"
+                )
+                logger.warning(f"❌ 스케줄 생성 검증 실패: {error_msg}")
+                raise ValueError(error_msg)
+            
+            # 3. 스케줄 생성
             query = """
             INSERT INTO schedules (user_id, work_date, shift_type, start_time, end_time)
             VALUES (%s, %s, %s, %s, %s)
@@ -154,6 +192,9 @@ class ScheduleService:
                 schedule_data.get('end_time')
             )
             return self.db.execute_insert_returning(query, params)
+        except ValueError as ve:
+            # 검증 에러는 그대로 전달
+            raise
         except Exception as e:
             logger.error(f"스케줄 생성 오류: {e}")
             raise
@@ -161,6 +202,28 @@ class ScheduleService:
     def update_schedule(self, schedule_id: int, user_id: str, schedule_data: Dict[str, Any]) -> Dict[str, Any]:
         """스케줄 업데이트"""
         try:
+            # shift_type이 업데이트되는 경우 검증
+            if 'shift_type' in schedule_data:
+                # 사용자의 work_type 조회
+                user_query = "SELECT work_type FROM users WHERE user_id = %s"
+                user_result = self.db.execute_query(user_query, (user_id,))
+                
+                if not user_result:
+                    raise ValueError("사용자를 찾을 수 없습니다")
+                
+                work_type = user_result[0]['work_type']
+                shift_type = schedule_data['shift_type']
+                
+                # shift_type 검증
+                if not validate_shift_type(work_type, shift_type):
+                    allowed = get_allowed_shift_types(work_type)
+                    error_msg = (
+                        f"{work_type} 근무 유형에서는 {shift_type} 교대를 사용할 수 없습니다. "
+                        f"허용된 교대: {', '.join(allowed)}"
+                    )
+                    logger.warning(f"❌ 스케줄 업데이트 검증 실패: {error_msg}")
+                    raise ValueError(error_msg)
+            
             # 업데이트할 필드들 동적 생성
             set_clauses = []
             params = []
@@ -189,6 +252,9 @@ class ScheduleService:
             """
             
             return self.db.execute_insert_returning(query, tuple(params))
+        except ValueError as ve:
+            # 검증 에러는 그대로 전달
+            raise
         except Exception as e:
             logger.error(f"스케줄 업데이트 오류: {e}")
             raise
