@@ -8,6 +8,7 @@ from psycopg2.extras import RealDictCursor
 import logging
 import random
 import uuid
+import re
 
 # 로깅 설정
 logger = logging.getLogger()
@@ -15,6 +16,58 @@ logger.setLevel(logging.INFO)
 
 # Bedrock Agent 클라이언트는 필요할 때 초기화 (lazy initialization)
 _bedrock_agent_runtime = None
+
+
+# ============================================================================
+# Custom Exception Classes (Task 6.2)
+# ============================================================================
+
+class NoScheduleFoundError(Exception):
+    """Raised when no schedule is found for the user on the specified date"""
+    def __init__(self, message: str, details: Optional[Dict] = None):
+        self.message = message
+        self.details = details or {}
+        super().__init__(self.message)
+
+
+class DatabaseConnectionError(Exception):
+    """Raised when database connection fails"""
+    def __init__(self, message: str, details: Optional[Dict] = None):
+        self.message = message
+        self.details = details or {}
+        super().__init__(self.message)
+
+
+class AgentTimeoutError(Exception):
+    """Raised when Bedrock Agent invocation times out"""
+    def __init__(self, message: str, details: Optional[Dict] = None):
+        self.message = message
+        self.details = details or {}
+        super().__init__(self.message)
+
+
+class AgentInvocationError(Exception):
+    """Raised when Bedrock Agent invocation fails"""
+    def __init__(self, message: str, details: Optional[Dict] = None):
+        self.message = message
+        self.details = details or {}
+        super().__init__(self.message)
+
+
+class ConfigurationError(Exception):
+    """Raised when required configuration is missing or invalid"""
+    def __init__(self, message: str, details: Optional[Dict] = None):
+        self.message = message
+        self.details = details or {}
+        super().__init__(self.message)
+
+
+class ValidationError(Exception):
+    """Raised when input validation fails"""
+    def __init__(self, message: str, details: Optional[Dict] = None):
+        self.message = message
+        self.details = details or {}
+        super().__init__(self.message)
 
 def get_bedrock_client():
     """Bedrock Agent Runtime 클라이언트 가져오기 (lazy initialization)"""
@@ -25,6 +78,341 @@ def get_bedrock_client():
             region_name=os.environ.get('BEDROCK_REGION', 'us-east-1')
         )
     return _bedrock_agent_runtime
+
+
+# ============================================================================
+# Configuration Validation (Task 6.1)
+# ============================================================================
+
+def validate_config():
+    """
+    Validate that all required environment variables are present
+    
+    Raises:
+        ConfigurationError: If any required configuration is missing
+    """
+    required_vars = {
+        'BEDROCK_AGENT_ID': 'Bedrock Agent ID',
+        'BEDROCK_AGENT_ALIAS_ID': 'Bedrock Agent Alias ID',
+        'BEDROCK_REGION': 'Bedrock Region',
+        'DB_HOST': 'Database Host',
+        'DB_NAME': 'Database Name',
+        'DB_USER': 'Database User',
+        'DB_PASSWORD': 'Database Password'
+    }
+    
+    missing_vars = []
+    for var, description in required_vars.items():
+        if not os.environ.get(var):
+            missing_vars.append(f"{var} ({description})")
+    
+    if missing_vars:
+        raise ConfigurationError(
+            f"Missing required environment variables: {', '.join(missing_vars)}",
+            {'missing_variables': missing_vars}
+        )
+    
+    logger.info("✅ Configuration validation passed")
+
+
+# ============================================================================
+# Input Validation (Task 6.3)
+# ============================================================================
+
+def validate_input(user_id: str, target_date: str):
+    """
+    Validate user_id and target_date inputs
+    
+    Args:
+        user_id: User identifier
+        target_date: Date string in YYYY-MM-DD format
+        
+    Raises:
+        ValidationError: If inputs are invalid
+    """
+    # Validate user_id
+    if not user_id or not isinstance(user_id, str) or len(user_id.strip()) == 0:
+        raise ValidationError(
+            "user_id must be a non-empty string",
+            {'field': 'user_id', 'value': user_id}
+        )
+    
+    # Validate target_date format (YYYY-MM-DD)
+    if not target_date or not isinstance(target_date, str):
+        raise ValidationError(
+            "target_date must be a non-empty string",
+            {'field': 'target_date', 'value': target_date}
+        )
+    
+    # Check date format using regex
+    date_pattern = r'^\d{4}-\d{2}-\d{2}$'
+    if not re.match(date_pattern, target_date):
+        raise ValidationError(
+            "target_date must be in YYYY-MM-DD format",
+            {'field': 'target_date', 'value': target_date, 'expected_format': 'YYYY-MM-DD'}
+        )
+    
+    # Try to parse the date to ensure it's valid
+    try:
+        datetime.strptime(target_date, '%Y-%m-%d')
+    except ValueError as e:
+        raise ValidationError(
+            f"Invalid date: {target_date}",
+            {'field': 'target_date', 'value': target_date, 'error': str(e)}
+        )
+    
+    logger.info(f"✅ Input validation passed: user_id={user_id}, target_date={target_date}")
+
+
+# ============================================================================
+# Bedrock Agent Integration Functions (Task 2.1, 2.2, 2.3)
+# ============================================================================
+
+def invoke_bedrock_agent(user_id: str, target_date: str, prompt: str, use_bio_coach: bool = False) -> Dict[str, Any]:
+    """
+    Invoke Bedrock Agent with specified prompt (Task 2.1)
+    
+    Args:
+        user_id: User identifier
+        target_date: Date for recommendations (YYYY-MM-DD)
+        prompt: Korean prompt for agent
+        use_bio_coach: If True, use Bio-Coach agent for sleep/caffeine recommendations
+        
+    Returns:
+        Parsed agent response with biorhythm data
+        
+    Raises:
+        Exception: If agent invocation fails
+    """
+    try:
+        # Get Bedrock Agent configuration
+        if use_bio_coach:
+            # Use Bio-Coach Agent for sleep/caffeine recommendations
+            agent_id = os.environ.get('BEDROCK_BIO_AGENT_ID')
+            agent_alias_id = os.environ.get('BEDROCK_BIO_AGENT_ALIAS_ID')
+            agent_name = "Bio-Coach"
+        else:
+            # Use RAG Chatbot Agent for general chat
+            agent_id = os.environ.get('BEDROCK_AGENT_ID')
+            agent_alias_id = os.environ.get('BEDROCK_AGENT_ALIAS_ID')
+            agent_name = "RAG Chatbot"
+        
+        if not agent_id or not agent_alias_id:
+            raise ValueError(f"{agent_name} Agent ID and Alias ID must be set")
+        
+        # Generate session ID
+        session_id = f"{user_id}_{int(datetime.now().timestamp())}"
+        
+        logger.info(f"🚀 Invoking {agent_name} Agent: agent_id={agent_id}, alias_id={agent_alias_id}, session_id={session_id}")
+        logger.info(f"📝 Prompt: {prompt}")
+        logger.info(f"📅 Target date: {target_date}")
+        
+        # Get Bedrock client
+        bedrock_client = get_bedrock_client()
+        
+        # Invoke agent
+        response = bedrock_client.invoke_agent(
+            agentId=agent_id,
+            agentAliasId=agent_alias_id,
+            sessionId=session_id,
+            inputText=f"{prompt} (날짜: {target_date}, 사용자: {user_id})"
+        )
+        
+        # Parse response stream
+        completion_text = ""
+        event_stream = response.get('completion')
+        
+        if not event_stream:
+            raise ValueError("No completion stream in Bedrock Agent response")
+        
+        for event in event_stream:
+            if 'chunk' in event:
+                chunk = event['chunk']
+                if 'bytes' in chunk:
+                    text = chunk['bytes'].decode('utf-8')
+                    completion_text += text
+        
+        logger.info(f"✅ {agent_name} Agent response: {completion_text[:200]}...")
+        
+        # Parse the response to extract biorhythm data
+        parsed_data = parse_agent_response(completion_text, user_id, target_date)
+        
+        return parsed_data
+        
+    except Exception as e:
+        logger.error(f"❌ Bedrock Agent invocation error: {type(e).__name__}: {e}")
+        raise
+
+
+def parse_agent_response(response_text: str, user_id: str, target_date: str) -> Dict[str, Any]:
+    """
+    Parse Bedrock Agent response and extract biorhythm data (Task 2.2)
+    
+    Args:
+        response_text: Raw agent response text
+        user_id: User identifier
+        target_date: Target date
+        
+    Returns:
+        Structured biorhythm data with sleep_time, coffee_time, shift_type, tip
+    """
+    import re
+    import json as json_lib
+    
+    try:
+        # Try to parse as JSON first (if agent returns structured data)
+        try:
+            data = json_lib.loads(response_text)
+            if isinstance(data, dict) and 'sleep' in data:
+                return {
+                    'sleep_time': data.get('sleep'),
+                    'coffee_time': data.get('coffee'),
+                    'shift_type': data.get('shift'),
+                    'tip': data.get('tip', ''),
+                    'date': target_date
+                }
+        except json_lib.JSONDecodeError:
+            pass
+        
+        # Extract time patterns (HH:MM format) with context
+        # Look for sleep-related keywords near times
+        sleep_keywords = ['수면', '잠', 'sleep', '취침', '자는']
+        caffeine_keywords = ['카페인', '커피', 'caffeine', 'coffee', '중단', '마감']
+        
+        # Find all times with their context
+        time_pattern = r'(.{0,20})\b([0-2]?[0-9]):([0-5][0-9])\b(.{0,20})'
+        time_matches = re.findall(time_pattern, response_text, re.IGNORECASE)
+        
+        sleep_time = None
+        coffee_time = None
+        
+        # Analyze each time with context
+        for before, hour, minute, after in time_matches:
+            time_str = f"{hour.zfill(2)}:{minute}"
+            context = (before + after).lower()
+            
+            # Check if this is a sleep time
+            if any(keyword in context for keyword in sleep_keywords):
+                if not sleep_time:  # Take first sleep time found
+                    sleep_time = time_str
+            
+            # Check if this is a caffeine time
+            elif any(keyword in context for keyword in caffeine_keywords):
+                if not coffee_time:  # Take first caffeine time found
+                    coffee_time = time_str
+        
+        # Fallback: if we couldn't identify times by context, use position
+        if not sleep_time or not coffee_time:
+            times = re.findall(r'\b([0-2]?[0-9]):([0-5][0-9])\b', response_text)
+            if not sleep_time and len(times) > 1:
+                # Second time is more likely to be sleep time
+                sleep_time = f"{times[1][0].zfill(2)}:{times[1][1]}"
+            if not coffee_time and len(times) > 0:
+                # First time is more likely to be caffeine time
+                coffee_time = f"{times[0][0].zfill(2)}:{times[0][1]}"
+        
+        # Final defaults
+        sleep_time = sleep_time or "23:00"
+        coffee_time = coffee_time or "14:00"
+        
+        # Extract shift type
+        shift_pattern = r'(주간|야간|초저녁|휴무|day|night|evening|off|D|E|N|O)'
+        shift_matches = re.findall(shift_pattern, response_text, re.IGNORECASE)
+        
+        # Map Korean to shift type
+        shift_mapping = {
+            '주간': 'D', 'day': 'D', 'D': 'D',
+            '야간': 'N', 'night': 'N', 'N': 'N',
+            '초저녁': 'E', 'evening': 'E', 'E': 'E',
+            '휴무': 'O', 'off': 'O', 'O': 'O'
+        }
+        
+        shift_type = 'D'  # Default
+        if shift_matches:
+            shift_type = shift_mapping.get(shift_matches[0].lower(), 'D')
+        
+        # Extract tip (everything after certain keywords)
+        tip = response_text
+        for keyword in ['팁:', '권장사항:', '조언:', 'tip:', 'advice:']:
+            if keyword in response_text.lower():
+                tip = response_text.split(keyword, 1)[1].strip()
+                break
+        
+        return {
+            'sleep_time': sleep_time,
+            'coffee_time': coffee_time,
+            'shift_type': shift_type,
+            'tip': tip[:500],  # Limit tip length
+            'date': target_date
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error parsing agent response: {e}")
+        # Return default values
+        return {
+            'sleep_time': "23:00",
+            'coffee_time': "14:00",
+            'shift_type': "D",
+            'tip': "규칙적인 수면 패턴을 유지하세요.",
+            'date': target_date
+        }
+
+
+def create_success_response(status_code: int, data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Create success response with CORS headers (Task 2.3)
+    
+    Args:
+        status_code: HTTP status code (200, 201, etc.)
+        data: Response data
+        
+    Returns:
+        API Gateway response format
+    """
+    return {
+        'statusCode': status_code,
+        'headers': {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+            'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
+        },
+        'body': json.dumps(data, ensure_ascii=False, default=str)
+    }
+
+
+def create_error_response(status_code: int, error_type: str, message: str, details: Optional[Dict] = None) -> Dict[str, Any]:
+    """
+    Create error response with CORS headers (Task 2.3)
+    
+    Args:
+        status_code: HTTP status code (400, 404, 500, etc.)
+        error_type: Error type identifier
+        message: Human-readable error message
+        details: Optional additional error context
+        
+    Returns:
+        API Gateway response format
+    """
+    body = {
+        'error': error_type,
+        'message': message,
+        'status_code': status_code
+    }
+    
+    if details:
+        body['details'] = details
+    
+    return {
+        'statusCode': status_code,
+        'headers': {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+            'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
+        },
+        'body': json.dumps(body, ensure_ascii=False)
+    }
 
 class DatabaseManager:
     def __init__(self):
@@ -69,80 +457,176 @@ class AIService:
         self.db = DatabaseManager()
     
     def generate_sleep_plan(self, user_id: str, plan_date: str) -> Dict[str, Any]:
-        """수면 계획 생성 (AI 더미 데이터)"""
+        """
+        수면 계획 생성 (Bedrock Agent 사용) 및 DB 저장
+        
+        Uses Bedrock Agent to generate personalized sleep recommendations
+        based on user's work schedule and saves to database.
+        """
         try:
-            # 사용자의 스케줄 정보 조회
-            schedule_query = """
-            SELECT shift_type, start_time, end_time 
-            FROM schedules 
-            WHERE user_id = %s AND work_date = %s
-            """
-            schedules = self.db.execute_query(schedule_query, (user_id, plan_date))
+            # Invoke Bedrock Agent with sleep-focused prompt
+            prompt = f"{plan_date}의 최적 수면 시간을 알려주세요"
             
-            # plan_date를 datetime 객체로 변환
-            plan_datetime = datetime.strptime(plan_date, '%Y-%m-%d')
+            logger.info(f"🛏️  Generating sleep plan for user={user_id}, date={plan_date}")
             
-            # 더미 AI 로직 - 실제로는 외부 AI 서비스 호출
-            if schedules and schedules[0]['shift_type'] == 'night':
-                # 야간 근무자용 수면 계획 (근무 종료 후 아침에 수면)
-                main_sleep_start = plan_datetime.replace(hour=8, minute=0)
-                main_sleep_end = plan_datetime.replace(hour=16, minute=0)
-                main_sleep_duration = 480  # 8시간
-                nap_start = plan_datetime.replace(hour=20, minute=0)
-                nap_end = plan_datetime.replace(hour=21, minute=0)
-                nap_duration = 60  # 1시간
-                rationale = "야간 근무 후 충분한 주간 수면과 근무 전 짧은 낮잠을 권장합니다."
-            elif schedules and schedules[0]['shift_type'] == 'evening':
-                # 저녁 근무자용 수면 계획 (근무 종료 후 새벽에 수면)
-                main_sleep_start = (plan_datetime + timedelta(days=1)).replace(hour=1, minute=0)
-                main_sleep_end = (plan_datetime + timedelta(days=1)).replace(hour=9, minute=0)
-                main_sleep_duration = 480  # 8시간
+            try:
+                # Call Bio-Coach Agent (use_bio_coach=True)
+                agent_response = invoke_bedrock_agent(user_id, plan_date, prompt, use_bio_coach=True)
+                
+                sleep_time = agent_response.get('sleep_time', '23:00')
+                shift_type = agent_response.get('shift_type', 'D')
+                tip = agent_response.get('tip', '규칙적인 수면 패턴을 유지하세요.')
+                
+                logger.info(f"✅ Sleep plan generated: sleep_time={sleep_time}, shift_type={shift_type}")
+                
+            except Exception as agent_error:
+                logger.warning(f"⚠️  Bedrock Agent failed, using fallback: {agent_error}")
+                # Fallback to schedule-based logic
+                schedule_query = """
+                SELECT shift_type, start_time, end_time FROM schedules 
+                WHERE user_id = %s AND work_date = %s
+                """
+                schedules = self.db.execute_query(schedule_query, (user_id, plan_date))
+                
+                if schedules and schedules[0]['shift_type'] == 'night':
+                    # 야간 근무: 퇴근 후 아침에 수면 (08:00 - 16:00)
+                    sleep_time = "08:00"
+                    shift_type = "N"
+                    tip = "야간 근무 후 충분한 주간 수면을 취하세요. 퇴근 후 바로 암막 커튼을 치고 수면하는 것이 중요합니다."
+                elif schedules and schedules[0]['shift_type'] == 'evening':
+                    # 저녁 근무: 늦은 밤 수면 (02:00 - 10:00)
+                    sleep_time = "02:00"
+                    shift_type = "E"
+                    tip = "저녁 근무 후 늦은 취침과 충분한 아침 수면을 권장합니다."
+                else:
+                    # 주간 근무 또는 휴무: 일반적인 수면 시간 (23:00 - 07:00)
+                    sleep_time = "23:00"
+                    shift_type = "D"
+                    tip = "밤 11시 이전 취침하여 규칙적인 생체 리듬을 유지하세요."
+            
+            # Calculate sleep window based on shift type
+            # Convert sleep_time to sleep window (start and end times)
+            from datetime import datetime as dt, timedelta
+            
+            try:
+                # Parse sleep_time (e.g., "09:00")
+                sleep_hour, sleep_minute = map(int, sleep_time.split(':'))
+                
+                # Calculate sleep duration (8 hours recommended)
+                sleep_duration_hours = 8
+                
+                # Calculate end time (sleep_time + duration)
+                sleep_start = dt.strptime(sleep_time, '%H:%M')
+                sleep_end = sleep_start + timedelta(hours=sleep_duration_hours)
+                
+                main_sleep_start = sleep_start.strftime('%H:%M')
+                main_sleep_end = sleep_end.strftime('%H:%M')
+                
+                # Nap recommendations based on shift type
                 nap_start = None
                 nap_end = None
-                nap_duration = None
-                rationale = "저녁 근무 후 늦은 취침과 충분한 아침 수면을 권장합니다."
-            else:
-                # 일반 근무자용 수면 계획 (밤 11시 - 다음날 아침 7시)
-                main_sleep_start = plan_datetime.replace(hour=23, minute=0)
-                main_sleep_end = (plan_datetime + timedelta(days=1)).replace(hour=7, minute=0)
-                main_sleep_duration = 480  # 8시간
-                # 낮잠은 다음날 오후로 설정
-                nap_start = (plan_datetime + timedelta(days=1)).replace(hour=15, minute=0)
-                nap_end = (plan_datetime + timedelta(days=1)).replace(hour=16, minute=0)
-                nap_duration = 60  # 1시간
-                rationale = "일반적인 수면 패턴으로 충분한 야간 수면을 권장합니다."
+                if shift_type == 'N':  # Night shift - recommend pre-work nap
+                    # 야간 근무 전 저녁 낮잠 (출근 전 20:00-20:30)
+                    nap_start = '20:00'
+                    nap_end = '20:30'
+                elif shift_type == 'E':  # Evening shift - recommend afternoon nap
+                    # 저녁 근무 전 오후 낮잠
+                    nap_start = '15:00'
+                    nap_end = '15:30'
+                # Day shift (D) - no nap needed
+                
+            except Exception as parse_error:
+                logger.warning(f"Sleep time parsing error: {parse_error}, using defaults")
+                main_sleep_start = '23:00'
+                main_sleep_end = '07:00'
+                nap_start = None
+                nap_end = None
             
-            # 데이터베이스에 저장
-            query = """
-            INSERT INTO sleep_plans (user_id, plan_date, main_sleep_start, main_sleep_end, 
-                                   main_sleep_duration, nap_start, nap_end, nap_duration, rationale)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (user_id, plan_date) 
-            DO UPDATE SET 
-                main_sleep_start = EXCLUDED.main_sleep_start,
-                main_sleep_end = EXCLUDED.main_sleep_end,
-                main_sleep_duration = EXCLUDED.main_sleep_duration,
-                nap_start = EXCLUDED.nap_start,
-                nap_end = EXCLUDED.nap_end,
-                nap_duration = EXCLUDED.nap_duration,
-                rationale = EXCLUDED.rationale,
-                updated_at = CURRENT_TIMESTAMP
-            RETURNING id, user_id, plan_date, 
-                     TO_CHAR(main_sleep_start, 'HH24:MI') as main_sleep_start,
-                     TO_CHAR(main_sleep_end, 'HH24:MI') as main_sleep_end,
-                     main_sleep_duration / 60 as main_sleep_duration,
-                     TO_CHAR(nap_start, 'HH24:MI') as nap_start,
-                     TO_CHAR(nap_end, 'HH24:MI') as nap_end,
-                     nap_duration / 60 as nap_duration,
-                     rationale, created_at, updated_at
-            """
+            # Save to database
+            try:
+                # Convert time strings to TIMESTAMP WITH TIME ZONE
+                # Format: plan_date + time
+                main_sleep_start_ts = f"{plan_date} {main_sleep_start}:00"
+                main_sleep_end_ts = f"{plan_date} {main_sleep_end}:00"
+                
+                # Handle next day for sleep end time
+                if main_sleep_end < main_sleep_start:
+                    # Sleep crosses midnight
+                    next_day = dt.strptime(plan_date, '%Y-%m-%d') + timedelta(days=1)
+                    main_sleep_end_ts = f"{next_day.strftime('%Y-%m-%d')} {main_sleep_end}:00"
+                
+                nap_start_ts = f"{plan_date} {nap_start}:00" if nap_start else None
+                nap_end_ts = f"{plan_date} {nap_end}:00" if nap_end else None
+                
+                # Insert or update sleep plan
+                upsert_query = """
+                INSERT INTO sleep_plans (
+                    user_id, plan_date, main_sleep_start, main_sleep_end, 
+                    main_sleep_duration, nap_start, nap_end, nap_duration, rationale
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (user_id, plan_date) 
+                DO UPDATE SET
+                    main_sleep_start = EXCLUDED.main_sleep_start,
+                    main_sleep_end = EXCLUDED.main_sleep_end,
+                    main_sleep_duration = EXCLUDED.main_sleep_duration,
+                    nap_start = EXCLUDED.nap_start,
+                    nap_end = EXCLUDED.nap_end,
+                    nap_duration = EXCLUDED.nap_duration,
+                    rationale = EXCLUDED.rationale,
+                    updated_at = CURRENT_TIMESTAMP
+                RETURNING id, user_id, plan_date, 
+                          main_sleep_start, main_sleep_end, main_sleep_duration,
+                          nap_start, nap_end, nap_duration, rationale,
+                          created_at, updated_at
+                """
+                
+                result = self.db.execute_insert_returning(
+                    upsert_query,
+                    (
+                        user_id, plan_date, main_sleep_start_ts, main_sleep_end_ts,
+                        sleep_duration_hours * 60,  # Convert to minutes
+                        nap_start_ts, nap_end_ts,
+                        30 if nap_start else None,  # 30 minutes nap
+                        tip
+                    )
+                )
+                
+                if result:
+                    logger.info(f"✅ Sleep plan saved to database: id={result['id']}")
+                    # Convert TIMESTAMP to time strings for response
+                    result['main_sleep_start'] = result['main_sleep_start'].strftime('%H:%M') if result['main_sleep_start'] else None
+                    result['main_sleep_end'] = result['main_sleep_end'].strftime('%H:%M') if result['main_sleep_end'] else None
+                    result['nap_start'] = result['nap_start'].strftime('%H:%M') if result['nap_start'] else None
+                    result['nap_end'] = result['nap_end'].strftime('%H:%M') if result['nap_end'] else None
+                    result['created_at'] = result['created_at'].isoformat() if result['created_at'] else None
+                    result['updated_at'] = result['updated_at'].isoformat() if result['updated_at'] else None
+                    result['main_sleep_duration'] = result['main_sleep_duration'] / 60  # Convert to hours
+                    result['nap_duration'] = result['nap_duration'] / 60 if result['nap_duration'] else None
+                    return result
+                    
+            except Exception as db_error:
+                logger.error(f"❌ Failed to save sleep plan to database: {db_error}")
+                # Continue with in-memory response if DB save fails
             
-            params = (user_id, plan_date, main_sleep_start, main_sleep_end, 
-                     main_sleep_duration, nap_start, nap_end, nap_duration, rationale)
+            # Return structured response matching frontend expectations (fallback if DB save fails)
+            return {
+                'id': None,
+                'user_id': user_id,
+                'plan_date': plan_date,
+                'main_sleep_start': main_sleep_start,
+                'main_sleep_end': main_sleep_end,
+                'main_sleep_duration': sleep_duration_hours,
+                'nap_start': nap_start,
+                'nap_end': nap_end,
+                'nap_duration': 0.5 if nap_start else None,  # 30 minutes
+                'rationale': tip,
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat()
+            }
             
-            return self.db.execute_insert_returning(query, params)
         except Exception as e:
-            logger.error(f"수면 계획 생성 오류: {e}")
+            logger.error(f"❌ Sleep plan generation error: {e}")
             raise
     
     def get_sleep_plan(self, user_id: str, plan_date: str) -> Optional[Dict[str, Any]]:
@@ -152,10 +636,10 @@ class AIService:
             SELECT id, user_id, plan_date, 
                    main_sleep_start,
                    main_sleep_end,
-                   main_sleep_duration / 60 as main_sleep_duration,
+                   main_sleep_duration / 60.0 as main_sleep_duration,
                    nap_start,
                    nap_end,
-                   nap_duration / 60 as nap_duration,
+                   nap_duration / 60.0 as nap_duration,
                    rationale, created_at, updated_at
             FROM sleep_plans 
             WHERE user_id = %s AND plan_date = %s
@@ -164,11 +648,13 @@ class AIService:
             
             if results:
                 result = results[0]
-                # TIMESTAMP를 ISO 형식 문자열로 변환
-                result['main_sleep_start'] = result['main_sleep_start'].isoformat() if result['main_sleep_start'] else None
-                result['main_sleep_end'] = result['main_sleep_end'].isoformat() if result['main_sleep_end'] else None
-                result['nap_start'] = result['nap_start'].isoformat() if result['nap_start'] else None
-                result['nap_end'] = result['nap_end'].isoformat() if result['nap_end'] else None
+                # Convert TIMESTAMP to time strings (HH:MM format)
+                result['main_sleep_start'] = result['main_sleep_start'].strftime('%H:%M') if result['main_sleep_start'] else None
+                result['main_sleep_end'] = result['main_sleep_end'].strftime('%H:%M') if result['main_sleep_end'] else None
+                result['nap_start'] = result['nap_start'].strftime('%H:%M') if result['nap_start'] else None
+                result['nap_end'] = result['nap_end'].strftime('%H:%M') if result['nap_end'] else None
+                result['created_at'] = result['created_at'].isoformat() if result['created_at'] else None
+                result['updated_at'] = result['updated_at'].isoformat() if result['updated_at'] else None
                 return result
             
             return None
@@ -177,58 +663,105 @@ class AIService:
             raise
     
     def generate_caffeine_plan(self, user_id: str, plan_date: str) -> Dict[str, Any]:
-        """카페인 계획 생성 (AI 더미 데이터)"""
+        """
+        카페인 계획 생성 (Bedrock Agent 사용) 및 DB 저장
+        
+        Uses Bedrock Agent to generate personalized caffeine cutoff recommendations
+        based on user's work schedule and sleep time and saves to database.
+        """
         try:
-            # 사용자의 스케줄 정보 조회
-            schedule_query = """
-            SELECT shift_type, start_time, end_time 
-            FROM schedules 
-            WHERE user_id = %s AND work_date = %s
-            """
-            schedules = self.db.execute_query(schedule_query, (user_id, plan_date))
+            # Invoke Bedrock Agent with caffeine-focused prompt
+            prompt = f"{plan_date}의 카페인 섭취 마감 시간을 알려주세요"
             
-            # 더미 AI 로직
-            if schedules and schedules[0]['shift_type'] == 'night':
-                # 야간 근무자용 카페인 계획
-                cutoff_time = "02:00"
-                max_intake_mg = 300
-                recommendations = "야간 근무 초반에만 카페인을 섭취하고, 새벽 2시 이후에는 피하세요."
-                alternative_methods = "밝은 조명, 가벼운 운동, 차가운 물로 각성 유지"
-            elif schedules and schedules[0]['shift_type'] == 'evening':
-                # 저녁 근무자용 카페인 계획
-                cutoff_time = "20:00"
-                max_intake_mg = 200
-                recommendations = "저녁 근무 전 적당한 카페인 섭취 후 야간에는 피하세요."
-                alternative_methods = "충분한 수분 섭취, 스트레칭, 건강한 간식"
-            else:
-                # 일반 근무자용 카페인 계획
-                cutoff_time = "14:00"
-                max_intake_mg = 400
-                recommendations = "오후 2시 이후 카페인 섭취를 피해 야간 수면의 질을 보장하세요."
-                alternative_methods = "녹차, 허브차, 가벼운 산책으로 오후 피로 해소"
+            logger.info(f"☕ Generating caffeine plan for user={user_id}, date={plan_date}")
             
-            # 데이터베이스에 저장
-            query = """
-            INSERT INTO caffeine_plans (user_id, plan_date, cutoff_time, max_intake_mg, 
-                                      recommendations, alternative_methods)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ON CONFLICT (user_id, plan_date) 
-            DO UPDATE SET 
-                cutoff_time = EXCLUDED.cutoff_time,
-                max_intake_mg = EXCLUDED.max_intake_mg,
-                recommendations = EXCLUDED.recommendations,
-                alternative_methods = EXCLUDED.alternative_methods,
-                updated_at = CURRENT_TIMESTAMP
-            RETURNING id, user_id, plan_date, cutoff_time, max_intake_mg, 
-                     recommendations, alternative_methods, created_at, updated_at
-            """
+            try:
+                # Call Bio-Coach Agent (use_bio_coach=True)
+                agent_response = invoke_bedrock_agent(user_id, plan_date, prompt, use_bio_coach=True)
+                
+                coffee_time = agent_response.get('coffee_time', '14:00')
+                shift_type = agent_response.get('shift_type', 'D')
+                tip = agent_response.get('tip', '오후 2시 이후 카페인 섭취를 피하세요.')
+                
+                logger.info(f"✅ Caffeine plan generated: coffee_time={coffee_time}, shift_type={shift_type}")
+                
+            except Exception as agent_error:
+                logger.warning(f"⚠️  Bedrock Agent failed, using fallback: {agent_error}")
+                # Fallback to schedule-based logic
+                schedule_query = """
+                SELECT shift_type FROM schedules 
+                WHERE user_id = %s AND work_date = %s
+                """
+                schedules = self.db.execute_query(schedule_query, (user_id, plan_date))
+                
+                if schedules and schedules[0]['shift_type'] == 'night':
+                    coffee_time = "03:00"
+                    shift_type = "N"
+                    tip = "야간 근무 초반에만 카페인을 섭취하고, 새벽 3시 이후에는 피하세요."
+                elif schedules and schedules[0]['shift_type'] == 'evening':
+                    coffee_time = "18:00"
+                    shift_type = "E"
+                    tip = "저녁 근무 전 적당한 카페인 섭취 후 야간에는 피하세요."
+                else:
+                    coffee_time = "14:00"
+                    shift_type = "D"
+                    tip = "오후 2시 이후 카페인 섭취를 피해 야간 수면의 질을 보장하세요."
             
-            params = (user_id, plan_date, cutoff_time, max_intake_mg, 
-                     recommendations, alternative_methods)
+            # Save to database
+            try:
+                # Insert or update caffeine plan
+                upsert_query = """
+                INSERT INTO caffeine_plans (
+                    user_id, plan_date, cutoff_time, max_intake_mg, 
+                    recommendations, alternative_methods
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (user_id, plan_date) 
+                DO UPDATE SET
+                    cutoff_time = EXCLUDED.cutoff_time,
+                    max_intake_mg = EXCLUDED.max_intake_mg,
+                    recommendations = EXCLUDED.recommendations,
+                    alternative_methods = EXCLUDED.alternative_methods,
+                    updated_at = CURRENT_TIMESTAMP
+                RETURNING id, user_id, plan_date, cutoff_time, max_intake_mg,
+                          recommendations, alternative_methods, created_at, updated_at
+                """
+                
+                result = self.db.execute_insert_returning(
+                    upsert_query,
+                    (
+                        user_id, plan_date, coffee_time, 400,  # 400mg standard
+                        tip, '물, 가벼운 스트레칭, 짧은 산책'
+                    )
+                )
+                
+                if result:
+                    logger.info(f"✅ Caffeine plan saved to database: id={result['id']}")
+                    # Convert TIME to string for response
+                    result['cutoff_time'] = result['cutoff_time'].strftime('%H:%M') if result['cutoff_time'] else None
+                    result['created_at'] = result['created_at'].isoformat() if result['created_at'] else None
+                    result['updated_at'] = result['updated_at'].isoformat() if result['updated_at'] else None
+                    return result
+                    
+            except Exception as db_error:
+                logger.error(f"❌ Failed to save caffeine plan to database: {db_error}")
+                # Continue with in-memory response if DB save fails
             
-            return self.db.execute_insert_returning(query, params)
+            # Return structured response matching frontend expectations (fallback if DB save fails)
+            return {
+                'id': None,
+                'user_id': user_id,
+                'plan_date': plan_date,
+                'cutoff_time': coffee_time,
+                'max_intake_mg': 400,  # Standard recommendation
+                'recommendations': tip,
+                'alternative_methods': '물, 가벼운 스트레칭, 짧은 산책',
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat()
+            }
+            
         except Exception as e:
-            logger.error(f"카페인 계획 생성 오류: {e}")
+            logger.error(f"❌ Caffeine plan generation error: {e}")
             raise
     
     def get_caffeine_plan(self, user_id: str, plan_date: str) -> Optional[Dict[str, Any]]:
@@ -236,14 +769,23 @@ class AIService:
         try:
             query = """
             SELECT id, user_id, plan_date, 
-                   TO_CHAR(cutoff_time, 'HH24:MI') as cutoff_time,
+                   cutoff_time,
                    max_intake_mg, recommendations, alternative_methods, 
                    created_at, updated_at
             FROM caffeine_plans 
             WHERE user_id = %s AND plan_date = %s
             """
             results = self.db.execute_query(query, (user_id, plan_date))
-            return results[0] if results else None
+            
+            if results:
+                result = results[0]
+                # Convert TIME to string (HH:MM format)
+                result['cutoff_time'] = result['cutoff_time'].strftime('%H:%M') if result['cutoff_time'] else None
+                result['created_at'] = result['created_at'].isoformat() if result['created_at'] else None
+                result['updated_at'] = result['updated_at'].isoformat() if result['updated_at'] else None
+                return result
+            
+            return None
         except Exception as e:
             logger.error(f"카페인 계획 조회 오류: {e}")
             raise

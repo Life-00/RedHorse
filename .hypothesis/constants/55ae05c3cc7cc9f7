@@ -1,0 +1,4 @@
+# file: C:\Users\kanda\RedHorse\backend\lambda\biopathway_calculator\lambda_function.py
+# hypothesis_version: 6.151.4
+
+[200, 400, 404, 500, '02:00', '03:00', '09:00', '1.0', '14:00', '15:00', '18:00', '23:00', '5432', 'D', 'DB_HOST', 'DB_NAME', 'DB_PASSWORD', 'DB_PORT', 'DB_USER', 'E', 'GetBioPathwayAction', 'InternalServerError', 'N', 'NoScheduleFound', 'O', 'TEXT', 'ValidationError', 'actionGroup', 'body', 'coffee', 'date', 'day', 'end_time', 'error', 'evening', 'function', 'functionResponse', 'get_daily_biorhythm', 'message', 'messageVersion', 'name', 'night', 'off', 'parameters', 'response', 'responseBody', 'shift', 'shift_type', 'sleep', 'start_time', 'statusCode', 'target_date', 'tip', 'user_id', 'value']

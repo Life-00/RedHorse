@@ -159,7 +159,7 @@ export default function PlanPage({ onNavigate }: Props) {
                   <div className="flex-1 pt-1">
                     <div className="text-[13px] font-black text-gray-400 mb-1 tracking-wider uppercase">
                       {/* ISO 형식에서 시간만 추출 (HH:MM) */}
-                      {block.time.includes('T') ? new Date(block.time).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }) : block.time}
+                      {block.time && block.time.includes('T') ? new Date(block.time).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }) : block.time || '시간 미정'}
                     </div>
 
                     {block.label && (
@@ -193,11 +193,11 @@ export default function PlanPage({ onNavigate }: Props) {
                           {Math.round(sleepPlan.main_sleep_duration)}시간
                         </div>
                         <div className="text-[12px] text-indigo-700 font-medium opacity-80 uppercase tracking-wide">
-                          {sleepPlan.main_sleep_start.includes('T') 
+                          {sleepPlan.main_sleep_start && sleepPlan.main_sleep_start.includes('T') 
                             ? new Date(sleepPlan.main_sleep_start).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
-                            : sleepPlan.main_sleep_start} – {sleepPlan.main_sleep_end.includes('T')
+                            : sleepPlan.main_sleep_start || '시간 미정'} – {sleepPlan.main_sleep_end && sleepPlan.main_sleep_end.includes('T')
                             ? new Date(sleepPlan.main_sleep_end).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
-                            : sleepPlan.main_sleep_end}
+                            : sleepPlan.main_sleep_end || '시간 미정'}
                         </div>
                       </motion.div>
                     )}

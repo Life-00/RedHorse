@@ -433,6 +433,8 @@ def deploy_lambda_function(function_name, role_arn, vpc_config):
             'S3_BUCKET_NAME': os.environ.get('S3_BUCKET_NAME', 'redhorse-s3-ai-0126'),
             'BEDROCK_AGENT_ID': os.environ.get('BEDROCK_AGENT_ID', ''),
             'BEDROCK_AGENT_ALIAS_ID': os.environ.get('BEDROCK_AGENT_ALIAS_ID', ''),
+            'BEDROCK_BIO_AGENT_ID': os.environ.get('BEDROCK_BIO_AGENT_ID', ''),
+            'BEDROCK_BIO_AGENT_ALIAS_ID': os.environ.get('BEDROCK_BIO_AGENT_ALIAS_ID', ''),
             'BEDROCK_REGION': os.environ.get('BEDROCK_REGION', 'us-east-1'),
             'OCR_LAMBDA_NAME': os.environ.get('OCR_LAMBDA_NAME', 'ShiftSync-Vision-OCR')
         }
