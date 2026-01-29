@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect, useState } from "react";
 import {
   Coffee,
   Sun,
@@ -9,14 +9,55 @@ import {
 } from "lucide-react";
 
 import type { ScreenType } from "../../types/app";
-import BottomNav from "../../components/layout/BottomNav"; 
+import BottomNav from "../../components/layout/BottomNav";
+import { aiApi } from "../../lib/api";
+import { useCurrentUser, useToday } from "../../hooks/useApi";
+import type { CaffeinePlan } from "../../types/api";
 
 type Props = {
   onNavigate: (s: ScreenType) => void;
 };
 
 export default function CaffeineCutoffPage({ onNavigate }: Props) {
-  const cutoffHour = 21;
+  const { userId, loading: userLoading } = useCurrentUser();
+  const today = useToday();
+  
+  const [caffeinePlan, setCaffeinePlan] = useState<CaffeinePlan | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // 카페인 계획 로드
+  useEffect(() => {
+    if (!userId || userLoading) return;
+
+    const loadCaffeinePlan = async () => {
+      try {
+        setLoading(true);
+        const response = await aiApi.getCaffeinePlan(userId, today);
+        setCaffeinePlan(response.caffeine_plan);
+      } catch (error) {
+        console.error('카페인 계획 로드 실패:', error);
+        // 계획이 없으면 생성
+        try {
+          const createResponse = await aiApi.generateCaffeinePlan(userId, today);
+          setCaffeinePlan(createResponse.caffeine_plan);
+        } catch (createError) {
+          console.error('카페인 계획 생성 실패:', createError);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadCaffeinePlan();
+  }, [userId, userLoading, today]);
+
+  // cutoff_time에서 시간 추출 (HH:MM:SS 형식)
+  const cutoffHour = useMemo(() => {
+    if (!caffeinePlan?.cutoff_time) return 21;
+    const timeStr = caffeinePlan.cutoff_time;
+    const hour = parseInt(timeStr.split(':')[0], 10);
+    return hour;
+  }, [caffeinePlan]);
 
   // 원 둘레(대략) = 2πr, r=90 -> 약 565.486...
   const circumference = 565;
@@ -36,6 +77,17 @@ export default function CaffeineCutoffPage({ onNavigate }: Props) {
     [cutoffHour]
   );
 
+  if (loading) {
+    return (
+      <div className="relative w-full h-full bg-[#F8F9FD] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="text-gray-600 font-bold">카페인 계획을 불러오는 중...</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative w-full bg-[#F8F9FD] rounded-3xl overflow-hidden border border-slate-100">
       {/* Header */}
@@ -50,7 +102,6 @@ export default function CaffeineCutoffPage({ onNavigate }: Props) {
             </p>
           </div>
 
-          {/* 예: 다른 페이지로 이동 버튼을 걸고 싶으면 */}
           <button
             onClick={() => onNavigate("wellness")}
             className="px-4 py-2 rounded-full bg-indigo-50 text-[#5843E4] text-sm font-bold"
@@ -107,7 +158,7 @@ export default function CaffeineCutoffPage({ onNavigate }: Props) {
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <Coffee className="w-8 h-8 text-amber-600 mb-2" />
             <div className="text-3xl font-semibold text-gray-900">
-              {String(cutoffHour).padStart(2, "0")}:00
+              {caffeinePlan?.cutoff_time || '21:00'}
             </div>
             <div className="text-sm text-gray-500">이전까지</div>
           </div>
@@ -132,10 +183,10 @@ export default function CaffeineCutoffPage({ onNavigate }: Props) {
           <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
           <div>
             <div className="text-sm font-medium text-amber-900 mb-1">
-              카페인 반감기: 약 5시간
+              {caffeinePlan?.recommendations || '카페인 반감기: 약 5시간'}
             </div>
             <div className="text-xs text-amber-700">
-              자정 수면 기준으로 계산된 권장 시각입니다
+              최대 권장 섭취량: {caffeinePlan?.max_intake_mg || 400}mg
             </div>
           </div>
         </div>

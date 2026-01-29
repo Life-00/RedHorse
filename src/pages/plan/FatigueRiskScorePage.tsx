@@ -1,15 +1,29 @@
 // src/pages/plan/FatigueRiskScorePage.tsx
-import { useMemo } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { AlertTriangle, Moon, Car, Bus, ArrowRight } from "lucide-react";
 import type { ScreenType } from "../../types/app";
 import TopBar from "../../components/layout/TopBar";
 import BottomNav from "../../components/layout/BottomNav";
+import { fatigueApi } from "../../lib/api";
+import { useCurrentUser, useToday } from "../../hooks/useApi";
 
 type RiskLevel = "low" | "medium" | "high";
 
 type Props = {
   onNavigate: (screen: ScreenType) => void;
 };
+
+interface FatigueAssessment {
+  id: number;
+  user_id: string;
+  assessment_date: string;
+  sleep_hours: number;
+  consecutive_night_shifts: number;
+  commute_time: number;
+  risk_level: RiskLevel;
+  risk_score: number;
+  safety_recommendations: string;
+}
 
 function RiskBadge({
   level,
@@ -66,8 +80,70 @@ function RiskBadge({
 }
 
 export default function FatigueRiskScorePage({ onNavigate }: Props) {
-  // 일단은 고정 값(나중에 백엔드/상태 연동)
-  const level: RiskLevel = "medium";
+  const { userId, loading: userLoading } = useCurrentUser();
+  const today = useToday();
+  
+  const [assessment, setAssessment] = useState<FatigueAssessment | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // 피로 위험도 평가 로드
+  useEffect(() => {
+    if (!userId || userLoading) return;
+
+    const loadFatigueAssessment = async () => {
+      try {
+        setLoading(true);
+        const response = await fatigueApi.getFatigueAssessment(userId, today);
+        setAssessment(response.assessment);
+      } catch (error) {
+        console.error('피로 위험도 로드 실패:', error);
+        // 평가가 없으면 생성
+        try {
+          const createResponse = await fatigueApi.calculateFatigueRisk(userId, today);
+          setAssessment(createResponse.assessment);
+        } catch (createError) {
+          console.error('피로 위험도 생성 실패:', createError);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadFatigueAssessment();
+  }, [userId, userLoading, today]);
+
+  const level: RiskLevel = assessment?.risk_level || "medium";
+  const riskScore = assessment?.risk_score || 0;
+
+  // 위험도 레벨 텍스트
+  const riskLevelText = useMemo(() => {
+    if (level === "low") return "낮음";
+    if (level === "high") return "높음";
+    return "중간";
+  }, [level]);
+
+  // 위험도 레벨 색상
+  const riskLevelColor = useMemo(() => {
+    if (level === "low") return "text-emerald-600";
+    if (level === "high") return "text-rose-600";
+    return "text-amber-600";
+  }, [level]);
+
+  // 미터 위치 계산 (0-100 점수를 0-100% 위치로 변환)
+  const meterPosition = useMemo(() => {
+    return `${riskScore}%`;
+  }, [riskScore]);
+
+  if (loading) {
+    return (
+      <div className="h-full w-full bg-[#F8F9FD] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="text-gray-600 font-bold">피로 위험도를 계산하는 중...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden relative">
@@ -83,7 +159,7 @@ export default function FatigueRiskScorePage({ onNavigate }: Props) {
         {/* Risk Meter */}
         <div className="px-7 py-8">
           <div className="text-center mb-6">
-            <div className="text-5xl font-black text-amber-600 mb-2">중간</div>
+            <div className={`text-5xl font-black ${riskLevelColor} mb-2`}>{riskLevelText}</div>
             <RiskBadge level={level} size="lg" />
           </div>
 
@@ -93,8 +169,15 @@ export default function FatigueRiskScorePage({ onNavigate }: Props) {
             <div className="absolute inset-y-0 left-1/3 w-1/3 bg-gradient-to-r from-amber-400 to-amber-500" />
             <div className="absolute inset-y-0 left-2/3 w-1/3 bg-gradient-to-r from-rose-400 to-rose-500" />
 
-            {/* Current Indicator (중간 기준 45%) */}
-            <div className="absolute top-1/2 -translate-y-1/2 left-[45%] w-4 h-4 bg-white border-2 border-amber-600 rounded-full shadow-lg" />
+            {/* Current Indicator */}
+            <div 
+              className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white border-2 rounded-full shadow-lg ${
+                level === "low" ? "border-emerald-600" :
+                level === "high" ? "border-rose-600" :
+                "border-amber-600"
+              }`}
+              style={{ left: meterPosition, transform: 'translate(-50%, -50%)' }}
+            />
           </div>
 
           <div className="flex justify-between mt-2 text-xs font-black text-gray-400">
@@ -116,7 +199,9 @@ export default function FatigueRiskScorePage({ onNavigate }: Props) {
                   <div className="text-xs font-black text-gray-400">최근 7일</div>
                 </div>
               </div>
-              <div className="text-base font-black text-amber-600">5.5시간</div>
+              <div className={`text-base font-black ${riskLevelColor}`}>
+                {assessment?.sleep_hours || 0}시간
+              </div>
             </div>
 
             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
@@ -127,7 +212,9 @@ export default function FatigueRiskScorePage({ onNavigate }: Props) {
                   <div className="text-xs font-black text-gray-400">현재 사이클</div>
                 </div>
               </div>
-              <div className="text-base font-black text-amber-600">3일째</div>
+              <div className={`text-base font-black ${riskLevelColor}`}>
+                {assessment?.consecutive_night_shifts || 0}일째
+              </div>
             </div>
 
             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
@@ -138,62 +225,54 @@ export default function FatigueRiskScorePage({ onNavigate }: Props) {
                   <div className="text-xs font-black text-gray-400">편도 기준</div>
                 </div>
               </div>
-              <div className="text-base font-black text-gray-900">30분</div>
+              <div className="text-base font-black text-gray-900">
+                {assessment?.commute_time || 0}분
+              </div>
             </div>
           </div>
         </div>
 
         {/* Safety Mode Recommendations */}
-        <div className="px-7 pb-6">
-          <div className="p-5 bg-amber-50 border border-amber-200 rounded-2xl">
-            <div className="flex items-center gap-2 mb-4">
-              <AlertTriangle className="w-5 h-5 text-amber-600" />
-              <h3 className="font-black text-amber-900">안전 모드 권장사항</h3>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex gap-3 p-3 bg-white rounded-xl">
-                <div className="w-8 h-8 bg-rose-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Car className="w-4 h-4 text-rose-600" />
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm font-black text-gray-900 mb-1">퇴근 후 운전 피하기</div>
-                  <div className="text-xs font-black text-gray-500">가능하면 대중교통 이용</div>
-                </div>
+        {assessment?.safety_recommendations && (
+          <div className="px-7 pb-6">
+            <div className={`p-5 border rounded-2xl ${
+              level === "low" ? "bg-emerald-50 border-emerald-200" :
+              level === "high" ? "bg-rose-50 border-rose-200" :
+              "bg-amber-50 border-amber-200"
+            }`}>
+              <div className="flex items-center gap-2 mb-4">
+                <AlertTriangle className={`w-5 h-5 ${
+                  level === "low" ? "text-emerald-600" :
+                  level === "high" ? "text-rose-600" :
+                  "text-amber-600"
+                }`} />
+                <h3 className={`font-black ${
+                  level === "low" ? "text-emerald-900" :
+                  level === "high" ? "text-rose-900" :
+                  "text-amber-900"
+                }`}>안전 모드 권장사항</h3>
               </div>
 
-              <div className="flex gap-3 p-3 bg-white rounded-xl">
-                <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Moon className="w-4 h-4 text-indigo-600" />
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm font-black text-gray-900 mb-1">파워냅 우선 실행</div>
-                  <div className="text-xs font-black text-gray-500">근무 전 15-30분 권장</div>
-                </div>
-              </div>
-
-              <div className="flex gap-3 p-3 bg-white rounded-xl">
-                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Bus className="w-4 h-4 text-blue-600" />
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm font-black text-gray-900 mb-1">대중교통 권장</div>
-                  <div className="text-xs font-black text-gray-500">이동 중 휴식 가능</div>
-                </div>
+              <div className="text-sm font-medium leading-relaxed whitespace-pre-line">
+                {assessment.safety_recommendations}
               </div>
             </div>
-          </div>
 
-          <div className="text-xs text-center font-black text-gray-400 mt-6">
-            의료 진단이 아닌 정보 제공 목적입니다
+            <div className="text-xs text-center font-black text-gray-400 mt-6">
+              의료 진단이 아닌 정보 제공 목적입니다
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Action Button (고정 위치) */}
+        {/* Action Button */}
         <div className="px-7">
           <div className="sticky bottom-28">
             <button
-              className="w-full bg-amber-600 text-white py-4 rounded-full flex items-center justify-center gap-2 shadow-lg active:scale-[0.99]"
+              className={`w-full text-white py-4 rounded-full flex items-center justify-center gap-2 shadow-lg active:scale-[0.99] ${
+                level === "low" ? "bg-emerald-600" :
+                level === "high" ? "bg-rose-600" :
+                "bg-amber-600"
+              }`}
               onClick={() => onNavigate("plan")}
             >
               오늘 리스크 줄이기

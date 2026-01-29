@@ -90,7 +90,6 @@ export default function App() {
       // ✅ 로그인 했고 온보딩 완료면 홈 대시보드
       setScreen("home");
     })();
-    // screen도 deps에 넣으면 auth페이지에서 다시 덮어쓸 수 있어서 의도적으로 제외
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefs.onboardingCompleted]);
 
@@ -108,7 +107,6 @@ export default function App() {
 
   const handleLoginSuccess = async () => {
     console.log('🔍 로그인 성공 - 사용자 동기화 시작');
-    setIsAuthed(true);
     
     // 로그인 성공 후 데이터베이스에 사용자 정보 동기화
     try {
@@ -149,7 +147,15 @@ export default function App() {
       console.error('❌ 사용자 동기화 실패:', error);
     }
     
-    setScreen("home");
+    // 인증 상태를 먼저 업데이트하고 화면 전환
+    setIsAuthed(true);
+    
+    // 온보딩 완료 여부에 따라 화면 전환
+    if (prefs.onboardingCompleted) {
+      setScreen("home");
+    } else {
+      setScreen("onboarding-1");
+    }
   };
 
   const handleLogoutDone = () => {
