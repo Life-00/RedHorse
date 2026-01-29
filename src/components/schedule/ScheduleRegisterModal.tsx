@@ -12,8 +12,8 @@ type Props = {
   // 직접 등록 적용
   onApplyRange: (payload: { start: string; end: string; shift: ShiftType }) => void;
 
-  // 이미지 업로드(일단 파일만 전달)
-  onUploadImage: (file: File) => void;
+  // 이미지 업로드 (파일 + 조 정보)
+  onUploadImage: (file: File, userGroup: string) => void;
 };
 
 function pad2(n: number) {
@@ -46,8 +46,10 @@ export default function ScheduleRegisterModal({
 
   // 업로드 폼
   const [file, setFile] = useState<File | null>(null);
+  const [userGroup, setUserGroup] = useState<string>("1조");
 
   const canApply = start && end && new Date(start) <= new Date(end);
+  const canUpload = file && userGroup.trim().length > 0;
 
   const handleApply = () => {
     if (!canApply) return;
@@ -56,8 +58,8 @@ export default function ScheduleRegisterModal({
   };
 
   const handleUpload = () => {
-    if (!file) return;
-    onUploadImage(file);
+    if (!canUpload) return;
+    onUploadImage(file!, userGroup);
     onClose();
   };
 
@@ -213,6 +215,21 @@ export default function ScheduleRegisterModal({
                       캡처/사진을 올리면 자동 인식(OCR)으로 등록할 수 있어요
                     </div>
 
+                    {/* 조 선택 */}
+                    <div className="mb-4">
+                      <div className="text-[11px] font-black text-gray-400 mb-2">근무 조</div>
+                      <input
+                        type="text"
+                        value={userGroup}
+                        onChange={(e) => setUserGroup(e.target.value)}
+                        placeholder="예: 1조, A조, 주간조"
+                        className="w-full px-3 py-3 rounded-xl bg-white border border-gray-100 text-[13px] font-bold text-gray-800 outline-none focus:ring-2 focus:ring-[#5843E4]/20"
+                      />
+                      <div className="text-[11px] text-gray-400 mt-1">
+                        근무표에서 찾을 조 이름을 입력하세요
+                      </div>
+                    </div>
+
                     <label className="block">
                       <input
                         type="file"
@@ -236,14 +253,14 @@ export default function ScheduleRegisterModal({
 
                   <button
                     onClick={handleUpload}
-                    disabled={!file}
+                    disabled={!canUpload}
                     className="w-full py-4 rounded-[18px] bg-[#5843E4] text-white font-black text-[15px] shadow-lg shadow-[#5843E4]/20 disabled:opacity-40 active:scale-[0.99]"
                   >
                     업로드하고 등록하기
                   </button>
 
-                  <div className="text-[11px] text-gray-300 font-black text-center">
-                    ※ 지금은 UI만 연결되어 있고, OCR 연동은 API 붙이면 완료됩니다.
+                  <div className="text-[11px] text-gray-400 font-black text-center">
+                    💡 AI가 이미지를 분석하여 자동으로 스케줄을 등록합니다
                   </div>
                 </div>
               )}

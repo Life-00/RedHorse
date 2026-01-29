@@ -190,6 +190,7 @@ export default function SchedulePage({ onNavigate }: Props) {
 
   // 등록 모달
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const applyRange = async (payload: { start: string; end: string; shift: ShiftType }) => {
     if (!userId) return;
@@ -266,22 +267,123 @@ export default function SchedulePage({ onNavigate }: Props) {
     }
   };
 
-  const uploadImage = async (file: File) => {
+  const uploadImage = async (file: File, userGroup: string) => {
     if (!userId) return;
     
     try {
-      console.log("📤 이미지 업로드 시작:", file.name, file.size, "bytes");
+      setUploading(true);
+      console.log("📤 이미지 업로드 시작:", file.name, file.size, "bytes", "조:", userGroup);
       
-      const response = await scheduleApi.uploadScheduleImage(userId, file);
+      const response = await scheduleApi.uploadScheduleImage(userId, file, userGroup);
       console.log('✅ 이미지 업로드 성공:', response);
       
-      // OCR 결과가 있으면 사용자에게 알림
-      if (response.upload?.ocr_result) {
-        alert(`이미지 업로드 완료!\n인식된 스케줄: ${response.upload.ocr_result.schedules?.length || 0}개`);
+      // OCR 결과 검증
+      if (!response.upload) {
+        throw new Error('업로드 응답이 올바르지 않습니다.');
+      }
+
+      const ocrResult = response.upload.ocr_result;
+      
+      // OCR 에러 확인
+      if (ocrResult?.error) {
+        alert(`이미지 분석 중 오류가 발생했습니다.\n\n오류: ${ocrResult.error}\n\n직접 등록을 이용해주세요.`);
+        return;
+      }
+      
+      // OCR 결과가 있으면 자동으로 스케줄에 적용
+      if (ocrResult?.schedules && ocrResult.schedules.length > 0) {
+        const ocrSchedules = ocrResult.schedules;
+        
+        console.log('🔍 OCR 인식된 스케줄:', ocrSchedules);
+        
+        // 날짜 유효성 검증
+        const validSchedules = ocrSchedules.filter((schedule: any) => {
+          const date = new Date(schedule.date);
+          const isValid = !isNaN(date.getTime()) && schedule.date.match(/^\d{4}-\d{2}-\d{2}$/);
+          if (!isValid) {
+            console.warn('⚠️ 유효하지 않은 날짜:', schedule.date);
+          }
+          return isValid;
+        });
+
+        if (validSchedules.length === 0) {
+          alert(`이미지 분석은 완료되었으나 유효한 날짜를 찾을 수 없습니다.\n\n인식된 스케줄: ${ocrSchedules.length}개\n유효한 스케줄: 0개\n\n직접 등록을 이용해주세요.`);
+          return;
+        }
+
+        if (validSchedules.length < ocrSchedules.length) {
+          console.warn(`⚠️ 일부 스케줄이 유효하지 않습니다. (${ocrSchedules.length - validSchedules.length}개 제외)`);
+        }
+        
+        // 각 스케줄을 데이터베이스에 저장
+        try {
+          const promises = validSchedules.map((schedule: any) => {
+            // 기존 스케줄이 있는지 확인
+            const existingSchedule = schedules.find(s => s.work_date === schedule.date);
+            
+            if (existingSchedule) {
+              // 업데이트
+              return scheduleApi.updateSchedule(userId, existingSchedule.id, {
+                shift_type: schedule.shift_type,
+                work_date: schedule.date,
+                start_time: schedule.start_time,
+                end_time: schedule.end_time
+              });
+            } else {
+              // 새로 생성
+              return scheduleApi.createSchedule(userId, {
+                work_date: schedule.date,
+                shift_type: schedule.shift_type,
+                start_time: schedule.start_time,
+                end_time: schedule.end_time
+              });
+            }
+          });
+          
+          await Promise.all(promises);
+          console.log('✅ OCR 스케줄 자동 등록 완료');
+          
+          // 스케줄 다시 로드
+          const year = cursor.getFullYear();
+          const month = cursor.getMonth();
+          const monthStart = new Date(year, month, 1);
+          const monthEnd = new Date(year, month + 1, 0);
+          
+          const updatedSchedules = await scheduleApi.getSchedules(
+            userId,
+            apiUtils.formatDate(monthStart),
+            apiUtils.formatDate(monthEnd)
+          );
+          
+          setSchedules(updatedSchedules.schedules || []);
+          
+          // 첫 번째 인식된 날짜로 이동
+          if (validSchedules[0]?.date) {
+            const firstDate = new Date(validSchedules[0].date);
+            setSelectedDate(firstDate);
+            setCursor(new Date(firstDate.getFullYear(), firstDate.getMonth(), 1));
+          }
+          
+          const invalidCount = ocrSchedules.length - validSchedules.length;
+          const message = invalidCount > 0
+            ? `이미지 분석 완료!\n\n✅ ${validSchedules.length}개의 근무 일정이 자동으로 등록되었습니다.\n⚠️ ${invalidCount}개의 일정은 유효하지 않아 제외되었습니다.`
+            : `이미지 분석 완료!\n\n✅ ${validSchedules.length}개의 근무 일정이 자동으로 등록되었습니다.`;
+          
+          alert(message);
+          
+        } catch (saveError) {
+          console.error('❌ OCR 스케줄 저장 실패:', saveError);
+          alert(`이미지 분석은 완료되었으나 저장에 실패했습니다.\n\n인식된 스케줄: ${validSchedules.length}개\n오류: ${saveError instanceof Error ? saveError.message : '알 수 없는 오류'}\n\n직접 등록을 이용해주세요.`);
+        }
+      } else {
+        alert(`이미지 업로드 완료!\n\n근무표에서 "${userGroup}"의 일정을 인식하지 못했습니다.\n\n다음을 확인해주세요:\n• 조 이름이 정확한지 확인\n• 이미지가 선명한지 확인\n• 근무표 형식이 표준인지 확인\n\n직접 등록을 이용해주세요.`);
       }
     } catch (error) {
       console.error('❌ 이미지 업로드 실패:', error);
-      alert('이미지 업로드에 실패했습니다.');
+      const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
+      alert(`이미지 업로드에 실패했습니다.\n\n오류: ${errorMessage}\n\n네트워크 연결을 확인하거나 잠시 후 다시 시도해주세요.`);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -543,6 +645,24 @@ export default function SchedulePage({ onNavigate }: Props) {
         onApplyRange={applyRange}
         onUploadImage={uploadImage}
       />
+
+      {/* 업로드 로딩 오버레이 */}
+      {uploading && (
+        <div className="absolute inset-0 z-[9999] bg-black/50 flex items-center justify-center">
+          <div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm mx-4">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+              <div className="text-center">
+                <div className="text-lg font-black text-gray-900 mb-2">이미지 분석 중...</div>
+                <div className="text-sm font-bold text-gray-500">
+                  AI가 근무표를 분석하고 있습니다.<br />
+                  잠시만 기다려주세요.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -146,13 +146,14 @@ export const scheduleApi = {
     apiClient.delete<{ message: string }>(`/users/${userId}/schedules/${scheduleId}`),
   
   // 스케줄 이미지 업로드
-  uploadScheduleImage: async (userId: string, file: File) => {
+  uploadScheduleImage: async (userId: string, file: File, userGroup: string = "1조") => {
     const session = await fetchAuthSession();
     const token = session.tokens?.idToken?.toString();
     
     // FormData 생성
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('user_group', userGroup);
     
     const response = await fetch(`${API_BASE_URL}/users/${userId}/schedule-images`, {
       method: 'POST',

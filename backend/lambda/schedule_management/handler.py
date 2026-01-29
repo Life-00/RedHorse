@@ -54,7 +54,9 @@ class DatabaseManager:
 class S3Manager:
     def __init__(self):
         self.s3_client = boto3.client('s3')
-        self.bucket_name = os.environ.get('S3_BUCKET_NAME', 'redhorse-s3-frontend-0126')
+        # 환경 변수에서 버킷 이름 가져오기 (기본값: redhorse-s3-ai-0126)
+        self.bucket_name = os.environ.get('S3_BUCKET_NAME', 'redhorse-s3-ai-0126')
+        logger.info(f"🪣 S3Manager 초기화: 버킷 = {self.bucket_name}")
     
     def upload_schedule_image(self, file_content: bytes, filename: str, user_id: str) -> str:
         """스케줄 이미지를 S3에 업로드"""
@@ -62,7 +64,9 @@ class S3Manager:
             # 고유한 파일명 생성
             file_extension = filename.split('.')[-1] if '.' in filename else 'jpg'
             unique_filename = f"{uuid.uuid4()}.{file_extension}"
-            s3_key = f"schedule-images/{user_id}/{unique_filename}"
+            s3_key = f"schedules/{user_id}/{unique_filename}"
+            
+            logger.info(f"🔄 S3 업로드 시작: s3://{self.bucket_name}/{s3_key}, 크기: {len(file_content)} bytes")
             
             # S3에 업로드
             self.s3_client.put_object(
@@ -72,9 +76,28 @@ class S3Manager:
                 ContentType=f'image/{file_extension}'
             )
             
+            logger.info(f"✅ S3 업로드 완료: s3://{self.bucket_name}/{s3_key}")
+            
+            # 업로드 검증: 파일이 실제로 존재하는지 확인
+            try:
+                import time
+                # S3 eventual consistency를 위한 짧은 대기
+                time.sleep(0.5)
+                
+                head_response = self.s3_client.head_object(
+                    Bucket=self.bucket_name,
+                    Key=s3_key
+                )
+                logger.info(f"✅ S3 업로드 검증 성공: 파일 크기 {head_response['ContentLength']} bytes")
+            except Exception as verify_error:
+                logger.error(f"❌ S3 업로드 검증 실패: {verify_error}")
+                raise Exception(f"S3 업로드는 성공했으나 파일 검증 실패: {verify_error}")
+            
             return s3_key
         except Exception as e:
-            logger.error(f"S3 업로드 오류: {e}")
+            logger.error(f"❌ S3 업로드 오류: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             raise
 
 class ScheduleService:
@@ -110,11 +133,17 @@ class ScheduleService:
             raise
     
     def create_schedule(self, user_id: str, schedule_data: Dict[str, Any]) -> Dict[str, Any]:
-        """스케줄 생성"""
+        """스케줄 생성 (UPSERT: 중복 시 업데이트)"""
         try:
             query = """
             INSERT INTO schedules (user_id, work_date, shift_type, start_time, end_time)
             VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (user_id, work_date) 
+            DO UPDATE SET 
+                shift_type = EXCLUDED.shift_type,
+                start_time = EXCLUDED.start_time,
+                end_time = EXCLUDED.end_time,
+                updated_at = CURRENT_TIMESTAMP
             RETURNING id, user_id, work_date, shift_type, start_time, end_time, created_at, updated_at
             """
             params = (
@@ -174,8 +203,8 @@ class ScheduleService:
             logger.error(f"스케줄 삭제 오류: {e}")
             raise
     
-    def upload_schedule_image(self, user_id: str, file_content: bytes, filename: str) -> Dict[str, Any]:
-        """스케줄 이미지 업로드 및 OCR 처리 준비"""
+    def upload_schedule_image(self, user_id: str, file_content: bytes, filename: str, user_group: str = "1조") -> Dict[str, Any]:
+        """스케줄 이미지 업로드 및 OCR Lambda 직접 호출"""
         try:
             # S3에 이미지 업로드
             s3_key = self.s3.upload_schedule_image(file_content, filename, user_id)
@@ -196,24 +225,106 @@ class ScheduleService:
             
             result = self.db.execute_insert_returning(query, params)
             
-            # TODO: 여기서 OCR AI 서비스 호출 (현재는 더미 데이터)
-            # 실제 구현 시에는 별도의 AI 서비스를 호출하여 OCR 처리
-            dummy_ocr_result = {
-                "schedules": [
-                    {
-                        "date": "2026-01-29",
-                        "shift_type": "day",
-                        "start_time": "09:00",
-                        "end_time": "18:00"
-                    },
-                    {
-                        "date": "2026-01-30",
-                        "shift_type": "evening",
-                        "start_time": "14:00",
-                        "end_time": "23:00"
+            # OCR Lambda 직접 호출
+            try:
+                logger.info(f"🔍 OCR Lambda 직접 호출 시작")
+                logger.info(f"   - S3 키: {s3_key}")
+                logger.info(f"   - 사용자 그룹: {user_group}")
+                logger.info(f"   - 파일 크기: {len(file_content)} bytes")
+                
+                # S3 eventual consistency를 위한 대기
+                import time
+                logger.info("⏳ S3 eventual consistency를 위해 1초 대기...")
+                time.sleep(1)
+                
+                # Lambda 클라이언트
+                lambda_client = boto3.client('lambda', region_name='us-east-1')
+                
+                # OCR Lambda 함수명 (환경 변수에서 가져오기)
+                ocr_lambda_name = os.environ.get('OCR_LAMBDA_NAME', 'ShiftSync-Vision-OCR')
+                
+                # OCR Lambda 호출 페이로드
+                payload = {
+                    's3_key': s3_key,
+                    'user_group': user_group
+                }
+                
+                logger.info(f"🤖 OCR Lambda 호출")
+                logger.info(f"   - Lambda 함수: {ocr_lambda_name}")
+                logger.info(f"   - 페이로드: {json.dumps(payload, ensure_ascii=False)}")
+                
+                # Lambda 동기 호출
+                response = lambda_client.invoke(
+                    FunctionName=ocr_lambda_name,
+                    InvocationType='RequestResponse',  # 동기 호출
+                    Payload=json.dumps(payload)
+                )
+                
+                # 응답 파싱
+                response_payload = json.loads(response['Payload'].read())
+                logger.info(f"✅ OCR Lambda 응답: {json.dumps(response_payload, ensure_ascii=False)}")
+                
+                # 응답 처리
+                if response_payload.get('statusCode') == 200:
+                    body = json.loads(response_payload['body'])
+                    schedules = body.get('schedules', [])
+                    
+                    # 타입 매핑 (D/E/N/O -> day/evening/night/off)
+                    type_mapping = {
+                        'D': 'day',
+                        'E': 'evening',
+                        'N': 'night',
+                        'O': 'off'
                     }
-                ]
-            }
+                    
+                    # 시간 기본값 설정
+                    time_defaults = {
+                        'day': {'start': '08:00', 'end': '17:00'},
+                        'evening': {'start': '14:00', 'end': '23:00'},
+                        'night': {'start': '22:00', 'end': '07:00'},
+                        'off': {'start': None, 'end': None}
+                    }
+                    
+                    # 스케줄 변환
+                    converted_schedules = []
+                    for item in schedules:
+                        shift_type = type_mapping.get(item.get('type', 'O'), 'off')
+                        times = time_defaults[shift_type]
+                        
+                        converted_schedules.append({
+                            'date': item.get('date'),
+                            'shift_type': shift_type,
+                            'start_time': times['start'],
+                            'end_time': times['end']
+                        })
+                    
+                    ocr_result = {
+                        'schedules': converted_schedules,
+                        'user_group': user_group,
+                        's3_key': s3_key
+                    }
+                    
+                    logger.info(f"✅ OCR 결과 파싱 성공: {len(converted_schedules)}개 스케줄 인식")
+                else:
+                    # 에러 응답
+                    error_body = json.loads(response_payload.get('body', '{}'))
+                    error_msg = error_body.get('error', 'Unknown error')
+                    logger.error(f"❌ OCR Lambda 에러: {error_msg}")
+                    ocr_result = {
+                        'schedules': [],
+                        'error': error_msg
+                    }
+                
+            except Exception as e:
+                logger.error(f"❌ OCR Lambda 호출 오류: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+                
+                # 오류 발생 시 빈 결과
+                ocr_result = {
+                    'schedules': [],
+                    'error': str(e)
+                }
             
             # OCR 결과 업데이트
             update_query = """
@@ -221,14 +332,46 @@ class ScheduleService:
             SET ocr_result = %s, upload_status = %s, processed_at = CURRENT_TIMESTAMP
             WHERE id = %s
             """
-            self.db.execute_update(update_query, (json.dumps(dummy_ocr_result), 'processed', result['id']))
+            self.db.execute_update(update_query, (json.dumps(ocr_result), 'processed', result['id']))
             
-            result['ocr_result'] = dummy_ocr_result
+            # OCR 결과를 schedules 테이블에 자동 저장
+            if ocr_result.get('schedules'):
+                logger.info(f"📝 OCR 결과를 schedules 테이블에 자동 저장 시작: {len(ocr_result['schedules'])}개")
+                saved_count = 0
+                for schedule in converted_schedules:
+                    try:
+                        # UPSERT: 중복 시 업데이트
+                        upsert_query = """
+                        INSERT INTO schedules (user_id, work_date, shift_type, start_time, end_time)
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT (user_id, work_date) 
+                        DO UPDATE SET 
+                            shift_type = EXCLUDED.shift_type,
+                            start_time = EXCLUDED.start_time,
+                            end_time = EXCLUDED.end_time,
+                            updated_at = CURRENT_TIMESTAMP
+                        """
+                        self.db.execute_update(upsert_query, (
+                            user_id,
+                            schedule['date'],
+                            schedule['shift_type'],
+                            schedule['start_time'],
+                            schedule['end_time']
+                        ))
+                        saved_count += 1
+                    except Exception as save_error:
+                        logger.error(f"❌ 스케줄 저장 실패 ({schedule['date']}): {save_error}")
+                
+                logger.info(f"✅ schedules 테이블에 {saved_count}개 스케줄 저장 완료")
+            
+            result['ocr_result'] = ocr_result
             result['upload_status'] = 'processed'
             
             return result
         except Exception as e:
             logger.error(f"스케줄 이미지 업로드 오류: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             raise
     
     def get_schedule_images(self, user_id: str) -> List[Dict[str, Any]]:
@@ -385,21 +528,22 @@ def lambda_handler(event, context):
                 
                 if 'multipart/form-data' not in content_type:
                     logger.warning(f"잘못된 Content-Type: {content_type}")
-                    # 테스트용 더미 데이터 사용
-                    dummy_image_data = b"dummy image content"
-                    filename = "schedule_image.jpg"
-                else:
-                    # multipart/form-data 파싱
-                    boundary = content_type.split('boundary=')[-1]
-                    
-                    # 간단한 multipart 파싱 (실제로는 더 복잡할 수 있음)
-                    parts = body.split(f'--{boundary}'.encode())
-                    
-                    file_content = None
-                    filename = 'uploaded_image.jpg'
-                    
-                    for part in parts:
-                        if b'Content-Disposition' in part and b'filename=' in part:
+                    return create_response(400, {'error': 'multipart/form-data 형식이 필요합니다'})
+                
+                # multipart/form-data 파싱
+                boundary = content_type.split('boundary=')[-1]
+                
+                # 간단한 multipart 파싱
+                parts = body.split(f'--{boundary}'.encode())
+                
+                file_content = None
+                filename = 'uploaded_image.jpg'
+                user_group = "1조"  # 기본값
+                
+                for part in parts:
+                    if b'Content-Disposition' in part:
+                        # 파일 파트 확인
+                        if b'filename=' in part:
                             # 파일명 추출
                             try:
                                 filename_start = part.find(b'filename="') + 10
@@ -415,22 +559,30 @@ def lambda_handler(event, context):
                                 file_content = part[content_start:content_end]
                             except:
                                 pass
-                            break
-                    
-                    if not file_content:
-                        logger.warning("파일 내용을 찾을 수 없음, 더미 데이터 사용")
-                        dummy_image_data = b"dummy image content"
-                        filename = "schedule_image.jpg"
-                    else:
-                        dummy_image_data = file_content
+                        
+                        # user_group 파트 확인
+                        elif b'name="user_group"' in part:
+                            try:
+                                content_start = part.find(b'\r\n\r\n') + 4
+                                content_end = part.rfind(b'\r\n')
+                                user_group = part[content_start:content_end].decode('utf-8').strip()
+                                logger.info(f"user_group 파라미터: {user_group}")
+                            except:
+                                pass
                 
-                logger.info(f"이미지 업로드 처리: {filename}, 크기: {len(dummy_image_data)} bytes")
+                if not file_content:
+                    logger.error("파일 내용을 찾을 수 없음")
+                    return create_response(400, {'error': '파일을 찾을 수 없습니다'})
                 
-                result = schedule_service.upload_schedule_image(user_id, dummy_image_data, filename)
+                logger.info(f"이미지 업로드 처리: {filename}, 크기: {len(file_content)} bytes, 조: {user_group}")
+                
+                result = schedule_service.upload_schedule_image(user_id, file_content, filename, user_group)
                 return create_response(201, {'upload': result})
                 
             except Exception as e:
                 logger.error(f"이미지 업로드 처리 오류: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
                 return create_response(500, {'error': f'이미지 업로드 처리 실패: {str(e)}'})
         
         elif http_method == 'GET' and '/schedule-images' in path:

@@ -42,20 +42,36 @@ def load_env_file():
         return
     
     loaded_vars = []
-    with open(env_path, 'r', encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith('#') and '=' in line:
-                key, value = line.split('=', 1)
-                # 값의 앞뒤 공백 제거
-                value = value.strip()
-                os.environ[key] = value
-                loaded_vars.append(key)
+    
+    # 다양한 인코딩 시도
+    encodings = ['utf-8', 'utf-16', 'cp1252', 'latin-1']
+    content = None
+    
+    for encoding in encodings:
+        try:
+            with open(env_path, 'r', encoding=encoding) as f:
+                content = f.read()
+            break
+        except UnicodeDecodeError:
+            continue
+    
+    if not content:
+        print_warning(f".env 파일을 읽을 수 없습니다")
+        return
+    
+    for line in content.split('\n'):
+        line = line.strip()
+        if line and not line.startswith('#') and '=' in line:
+            key, value = line.split('=', 1)
+            # 값의 앞뒤 공백 제거
+            value = value.strip()
+            os.environ[key] = value
+            loaded_vars.append(key)
     
     print_success(f".env 파일에서 {len(loaded_vars)}개 환경 변수 로드 완료")
     
     # 중요 변수 확인
-    important_vars = ['DB_HOST', 'RDS_SECURITY_GROUP_ID', 'BEDROCK_AGENT_ID']
+    important_vars = ['DB_HOST', 'RDS_SECURITY_GROUP_ID', 'BEDROCK_AGENT_ID', 'S3_BUCKET_NAME']
     for var in important_vars:
         value = os.environ.get(var)
         if value:
@@ -117,6 +133,32 @@ def get_or_create_lambda_role():
             )
             print_success("Bedrock Agent 권한 추가 완료")
         
+        # Lambda invoke 권한 확인 및 추가
+        try:
+            iam_client.get_role_policy(RoleName=role_name, PolicyName='LambdaInvokeAccess')
+            print_info("Lambda Invoke 권한이 이미 있습니다.")
+        except iam_client.exceptions.NoSuchEntityException:
+            print_info("Lambda Invoke 권한 추가 중...")
+            lambda_invoke_policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "lambda:InvokeFunction"
+                        ],
+                        "Resource": "*"
+                    }
+                ]
+            }
+            
+            iam_client.put_role_policy(
+                RoleName=role_name,
+                PolicyName='LambdaInvokeAccess',
+                PolicyDocument=json.dumps(lambda_invoke_policy)
+            )
+            print_success("Lambda Invoke 권한 추가 완료")
+        
         return role_arn
         
     except iam_client.exceptions.NoSuchEntityException:
@@ -177,6 +219,26 @@ def get_or_create_lambda_role():
             RoleName=role_name,
             PolicyName='BedrockAgentAccess',
             PolicyDocument=json.dumps(bedrock_policy)
+        )
+        
+        # Lambda invoke 인라인 정책 추가
+        lambda_invoke_policy = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": [
+                        "lambda:InvokeFunction"
+                    ],
+                    "Resource": "*"
+                }
+            ]
+        }
+        
+        iam_client.put_role_policy(
+            RoleName=role_name,
+            PolicyName='LambdaInvokeAccess',
+            PolicyDocument=json.dumps(lambda_invoke_policy)
         )
         
         print_success(f"IAM 역할 생성 완료: {role_arn}")
@@ -368,10 +430,11 @@ def deploy_lambda_function(function_name, role_arn, vpc_config):
             'DB_USER': os.environ.get('DB_USER', 'postgres'),
             'DB_PASSWORD': os.environ.get('DB_PASSWORD', ''),
             'APP_REGION': os.environ.get('AWS_REGION', 'us-east-1'),  # AWS_REGION 대신 APP_REGION 사용
-            'S3_BUCKET_NAME': os.environ.get('S3_BUCKET_NAME', 'redhorse-s3-frontend-0126'),
+            'S3_BUCKET_NAME': os.environ.get('S3_BUCKET_NAME', 'redhorse-s3-ai-0126'),
             'BEDROCK_AGENT_ID': os.environ.get('BEDROCK_AGENT_ID', ''),
             'BEDROCK_AGENT_ALIAS_ID': os.environ.get('BEDROCK_AGENT_ALIAS_ID', ''),
-            'BEDROCK_REGION': os.environ.get('BEDROCK_REGION', 'us-east-1')
+            'BEDROCK_REGION': os.environ.get('BEDROCK_REGION', 'us-east-1'),
+            'OCR_LAMBDA_NAME': os.environ.get('OCR_LAMBDA_NAME', 'ShiftSync-Vision-OCR')
         }
     }
     
