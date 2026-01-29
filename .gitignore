@@ -23,4 +23,27 @@ dist-ssr
 *.sln
 *.sw?
 
+# Environment files - 모든 .env 파일 제외 (민감 정보 포함)
 .env
+.env.local
+.env.production
+.env.production.local
+backend/.env
+backend/.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+backend/**/__pycache__/
+backend/temp_packages/
+
+# Lambda deployment packages
+backend/*.zip
+*.zip
+
+# AWS credentials
+.aws/
+credentials

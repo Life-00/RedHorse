@@ -10,10 +10,22 @@
 - **Lucide React** for icons
 - Mobile-first responsive design
 
-## Authentication & Backend
+## Backend Infrastructure
+- **AWS Lambda** with Python 3.x for serverless functions
+- **AWS RDS** (PostgreSQL) for database
+- **AWS S3** for file storage
+- **AWS API Gateway** for REST API endpoints
 - **AWS Amplify** for authentication
 - **AWS Cognito** for user management
-- Environment variables for configuration
+
+## Backend Services
+Lambda functions organized by domain:
+- `ai_services/` - AI-powered recommendations
+- `fatigue_assessment/` - Fatigue risk calculations
+- `jumpstart/` - Daily jumpstart plan generation
+- `schedule_management/` - Shift schedule operations
+- `user_management/` - User profile and preferences
+- `wellness/` - Wellness recommendations and tracking
 
 ## Development Tools
 - **ESLint** for code linting
@@ -22,7 +34,7 @@
 
 ## Common Commands
 
-### Development
+### Frontend Development
 ```bash
 npm run dev          # Start development server
 npm run build        # Build for production
@@ -30,10 +42,23 @@ npm run preview      # Preview production build
 npm run lint         # Run ESLint
 ```
 
+### Backend Development
+```bash
+python backend/scripts/init_database.py        # Initialize database schema
+python backend/scripts/deploy_lambda.py        # Deploy Lambda functions
+python backend/scripts/test_connection.py      # Test database connection
+python backend/scripts/check_database.py       # Verify database state
+```
+
 ### Environment Setup
-Required environment variables:
+Frontend environment variables (`.env.local`):
 - `VITE_COGNITO_USER_POOL_ID`
 - `VITE_COGNITO_USER_POOL_CLIENT_ID`
+
+Backend environment variables (`backend/.env`):
+- Database connection settings
+- AWS credentials and region
+- S3 bucket configuration
 
 ## Build Configuration
 - **Target**: ES2020

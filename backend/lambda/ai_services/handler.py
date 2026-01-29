@@ -7,10 +7,24 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import logging
 import random
+import uuid
 
 # 로깅 설정
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+# Bedrock Agent 클라이언트는 필요할 때 초기화 (lazy initialization)
+_bedrock_agent_runtime = None
+
+def get_bedrock_client():
+    """Bedrock Agent Runtime 클라이언트 가져오기 (lazy initialization)"""
+    global _bedrock_agent_runtime
+    if _bedrock_agent_runtime is None:
+        _bedrock_agent_runtime = boto3.client(
+            'bedrock-agent-runtime',
+            region_name=os.environ.get('BEDROCK_REGION', 'us-east-1')
+        )
+    return _bedrock_agent_runtime
 
 class DatabaseManager:
     def __init__(self):
@@ -235,7 +249,117 @@ class AIService:
             raise
     
     def chat_with_ai(self, user_id: str, message: str) -> Dict[str, Any]:
-        """AI 챗봇 상담 (더미 데이터)"""
+        """AI 챗봇 상담 (Bedrock Agent 사용)"""
+        try:
+            # Bedrock Agent 설정
+            agent_id = os.environ.get('BEDROCK_AGENT_ID')
+            agent_alias_id = os.environ.get('BEDROCK_AGENT_ALIAS_ID')
+            
+            if not agent_id or not agent_alias_id:
+                logger.warning("Bedrock Agent 설정이 없습니다. 더미 응답을 사용합니다.")
+                return self._chat_with_dummy_ai(user_id, message)
+            
+            # 세션 ID 생성 (사용자별 고유 세션)
+            session_id = f"{user_id}-{datetime.now().strftime('%Y%m%d')}"
+            
+            logger.info(f"Bedrock Agent 호출 시작: agent_id={agent_id}, alias_id={agent_alias_id}, session_id={session_id}")
+            
+            # Bedrock Agent 클라이언트 가져오기 (타임아웃 설정)
+            bedrock_client = boto3.client(
+                'bedrock-agent-runtime',
+                region_name=os.environ.get('BEDROCK_REGION', 'us-east-1'),
+                config=boto3.session.Config(
+                    connect_timeout=30,  # VPC 엔드포인트 연결을 위해 증가
+                    read_timeout=90,
+                    retries={'max_attempts': 2}  # 재시도 추가
+                )
+            )
+            
+            logger.info("Bedrock Agent invoke_agent 호출 중...")
+            logger.info(f"요청 파라미터: agentId={agent_id}, agentAliasId={agent_alias_id}, sessionId={session_id}")
+            
+            # Bedrock Agent 호출
+            response = bedrock_client.invoke_agent(
+                agentId=agent_id,
+                agentAliasId=agent_alias_id,
+                sessionId=session_id,
+                inputText=message,
+                enableTrace=True  # 디버깅을 위해 trace 활성화
+            )
+            
+            logger.info(f"Bedrock Agent 응답 수신: {list(response.keys())}")
+            logger.info("스트림 처리 시작...")
+            
+            # 응답 스트림 처리
+            ai_response = ""
+            event_stream = response.get('completion')
+            
+            if not event_stream:
+                logger.error("Bedrock Agent 응답에 completion 스트림이 없습니다")
+                return self._chat_with_dummy_ai(user_id, message)
+            
+            chunk_count = 0
+            error_occurred = False
+            
+            try:
+                for event in event_stream:
+                    chunk_count += 1
+                    logger.info(f"스트림 청크 {chunk_count} 수신: {list(event.keys())}")
+                    
+                    # trace 이벤트 로깅
+                    if 'trace' in event:
+                        trace = event['trace']
+                        logger.info(f"Trace 이벤트: {trace}")
+                    
+                    # chunk 이벤트 처리
+                    if 'chunk' in event:
+                        chunk = event['chunk']
+                        logger.info(f"Chunk 내용: {list(chunk.keys())}")
+                        
+                        if 'bytes' in chunk:
+                            text = chunk['bytes'].decode('utf-8')
+                            ai_response += text
+                            logger.info(f"텍스트 청크 ({len(text)}자): {text[:100]}...")
+                    
+                    # 오류 이벤트 확인
+                    if 'internalServerException' in event:
+                        logger.error(f"Internal Server Exception: {event['internalServerException']}")
+                        error_occurred = True
+                    
+                    if 'validationException' in event:
+                        logger.error(f"Validation Exception: {event['validationException']}")
+                        error_occurred = True
+                    
+                    if 'accessDeniedException' in event:
+                        logger.error(f"Access Denied Exception: {event['accessDeniedException']}")
+                        error_occurred = True
+                        
+            except Exception as stream_error:
+                logger.error(f"스트림 처리 중 오류: {type(stream_error).__name__}: {stream_error}", exc_info=True)
+                error_occurred = True
+            
+            logger.info(f"스트림 처리 완료: {chunk_count}개 청크, {len(ai_response)}자, 오류={error_occurred}")
+            
+            if error_occurred or not ai_response:
+                logger.warning("Bedrock Agent 응답이 비어있거나 오류 발생. 더미 응답 사용")
+                return self._chat_with_dummy_ai(user_id, message)
+            
+            # 채팅 기록 저장
+            query = """
+            INSERT INTO chat_history (user_id, message, response)
+            VALUES (%s, %s, %s)
+            RETURNING id, user_id, message, response, created_at
+            """
+            
+            return self.db.execute_insert_returning(query, (user_id, message, ai_response))
+            
+        except Exception as e:
+            logger.error(f"Bedrock Agent 호출 오류: {type(e).__name__}: {e}", exc_info=True)
+            # 오류 발생 시 더미 응답 사용
+            return self._chat_with_dummy_ai(user_id, message)
+    
+    def _chat_with_dummy_ai(self, user_id: str, message: str) -> Dict[str, Any]:
+        """AI 챗봇 상담 (더미 데이터 - 백업용)"""
         try:
             # 더미 AI 응답 생성
             dummy_responses = [
@@ -267,7 +391,7 @@ class AIService:
             
             return self.db.execute_insert_returning(query, (user_id, message, response))
         except Exception as e:
-            logger.error(f"AI 챗봇 오류: {e}")
+            logger.error(f"더미 AI 챗봇 오류: {e}")
             raise
     
     def get_chat_history(self, user_id: str, limit: int = 20) -> List[Dict[str, Any]]:

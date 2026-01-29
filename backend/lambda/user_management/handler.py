@@ -71,6 +71,11 @@ class UserService:
     def create_user_profile(self, user_data: Dict[str, Any]) -> Dict[str, Any]:
         """사용자 프로필 생성"""
         try:
+            # work_type 기본값 처리: 빈 문자열이면 'irregular'로 설정
+            work_type = user_data.get('work_type', 'irregular')
+            if not work_type or work_type.strip() == '':
+                work_type = 'irregular'
+            
             query = """
             INSERT INTO users (user_id, email, name, work_type, commute_time, wearable_device, onboarding_completed)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -80,7 +85,7 @@ class UserService:
                 user_data['user_id'],
                 user_data['email'],
                 user_data['name'],
-                user_data.get('work_type', ''),
+                work_type,
                 user_data.get('commute_time', 30),
                 user_data.get('wearable_device', 'none'),
                 user_data.get('onboarding_completed', False)

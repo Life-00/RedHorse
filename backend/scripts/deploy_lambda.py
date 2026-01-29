@@ -35,13 +35,33 @@ def print_error(msg):
 # 환경 변수 로드
 def load_env_file():
     env_path = Path(__file__).parent.parent / '.env'
-    if env_path.exists():
-        with open(env_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
-                    os.environ[key] = value
+    print_info(f".env 파일 경로: {env_path}")
+    
+    if not env_path.exists():
+        print_warning(f".env 파일을 찾을 수 없습니다: {env_path}")
+        return
+    
+    loaded_vars = []
+    with open(env_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                # 값의 앞뒤 공백 제거
+                value = value.strip()
+                os.environ[key] = value
+                loaded_vars.append(key)
+    
+    print_success(f".env 파일에서 {len(loaded_vars)}개 환경 변수 로드 완료")
+    
+    # 중요 변수 확인
+    important_vars = ['DB_HOST', 'RDS_SECURITY_GROUP_ID', 'BEDROCK_AGENT_ID']
+    for var in important_vars:
+        value = os.environ.get(var)
+        if value:
+            print_info(f"  ✓ {var}: {value[:20]}..." if len(value) > 20 else f"  ✓ {var}: {value}")
+        else:
+            print_warning(f"  ✗ {var}: 설정되지 않음")
 
 load_env_file()
 
@@ -67,7 +87,38 @@ def get_or_create_lambda_role():
     try:
         response = iam_client.get_role(RoleName=role_name)
         print_info(f"기존 IAM 역할 사용: {role_name}")
-        return response['Role']['Arn']
+        role_arn = response['Role']['Arn']
+        
+        # 기존 역할에 Bedrock 권한이 있는지 확인하고 없으면 추가
+        try:
+            iam_client.get_role_policy(RoleName=role_name, PolicyName='BedrockAgentAccess')
+            print_info("Bedrock Agent 권한이 이미 있습니다.")
+        except iam_client.exceptions.NoSuchEntityException:
+            print_info("Bedrock Agent 권한 추가 중...")
+            bedrock_policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "bedrock:InvokeAgent",
+                            "bedrock:InvokeModel",
+                            "bedrock:InvokeModelWithResponseStream"
+                        ],
+                        "Resource": "*"
+                    }
+                ]
+            }
+            
+            iam_client.put_role_policy(
+                RoleName=role_name,
+                PolicyName='BedrockAgentAccess',
+                PolicyDocument=json.dumps(bedrock_policy)
+            )
+            print_success("Bedrock Agent 권한 추가 완료")
+        
+        return role_arn
+        
     except iam_client.exceptions.NoSuchEntityException:
         print_info(f"IAM 역할 생성 중: {role_name}")
         
@@ -106,6 +157,28 @@ def get_or_create_lambda_role():
                 PolicyArn=policy_arn
             )
         
+        # Bedrock Agent 인라인 정책 추가
+        bedrock_policy = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": [
+                        "bedrock:InvokeAgent",
+                        "bedrock:InvokeModel",
+                        "bedrock:InvokeModelWithResponseStream"
+                    ],
+                    "Resource": "*"
+                }
+            ]
+        }
+        
+        iam_client.put_role_policy(
+            RoleName=role_name,
+            PolicyName='BedrockAgentAccess',
+            PolicyDocument=json.dumps(bedrock_policy)
+        )
+        
         print_success(f"IAM 역할 생성 완료: {role_arn}")
         
         # 역할이 전파될 때까지 대기
@@ -118,30 +191,94 @@ def get_or_create_lambda_role():
 def get_vpc_config():
     """VPC 설정 가져오기"""
     try:
-        # 기본 VPC 가져오기
-        vpcs = ec2_client.describe_vpcs(Filters=[{'Name': 'is-default', 'Values': ['true']}])
-        if not vpcs['Vpcs']:
-            print_warning("기본 VPC를 찾을 수 없습니다. VPC 없이 배포합니다.")
-            return None
-        
-        vpc_id = vpcs['Vpcs'][0]['VpcId']
-        
-        # 서브넷 가져오기
-        subnets = ec2_client.describe_subnets(Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}])
-        subnet_ids = [subnet['SubnetId'] for subnet in subnets['Subnets']]
-        
-        # 보안 그룹 가져오기
-        security_group_id = os.environ.get('RDS_SECURITY_GROUP_ID')
+        # Lambda 보안 그룹 ID 확인 (RDS 보안 그룹이 아님!)
+        security_group_id = os.environ.get('LAMBDA_SECURITY_GROUP_ID')
         if not security_group_id:
-            print_warning("RDS_SECURITY_GROUP_ID가 설정되지 않았습니다. VPC 없이 배포합니다.")
+            # 폴백: RDS_SECURITY_GROUP_ID 사용 (하위 호환성)
+            security_group_id = os.environ.get('RDS_SECURITY_GROUP_ID')
+            if not security_group_id:
+                print_warning("LAMBDA_SECURITY_GROUP_ID가 설정되지 않았습니다. VPC 없이 배포합니다.")
+                return None
+            print_warning("⚠️  RDS_SECURITY_GROUP_ID를 사용 중입니다. LAMBDA_SECURITY_GROUP_ID를 설정하세요.")
+        
+        print_info(f"Lambda 보안 그룹 ID: {security_group_id}")
+        
+        # 보안 그룹에서 VPC ID 가져오기
+        sg_response = ec2_client.describe_security_groups(GroupIds=[security_group_id])
+        if not sg_response['SecurityGroups']:
+            print_warning(f"보안 그룹을 찾을 수 없습니다: {security_group_id}")
             return None
         
-        return {
-            'SubnetIds': subnet_ids[:2],  # 최소 2개 필요
+        vpc_id = sg_response['SecurityGroups'][0]['VpcId']
+        print_info(f"VPC ID: {vpc_id}")
+        
+        # VPC의 서브넷 가져오기 (PRIVATE 서브넷 우선)
+        subnets_response = ec2_client.describe_subnets(
+            Filters=[
+                {'Name': 'vpc-id', 'Values': [vpc_id]},
+                {'Name': 'state', 'Values': ['available']}
+            ]
+        )
+        
+        if not subnets_response['Subnets']:
+            print_warning(f"VPC {vpc_id}에서 사용 가능한 서브넷을 찾을 수 없습니다.")
+            return None
+        
+        # 서브넷 정보 출력
+        all_subnets = subnets_response['Subnets']
+        print_info(f"사용 가능한 서브넷 {len(all_subnets)}개 발견:")
+        
+        # PRIVATE 서브넷 우선 선택 (이름에 'private' 포함 또는 Type 태그)
+        private_subnets = []
+        public_subnets = []
+        
+        for subnet in all_subnets:
+            subnet_id = subnet['SubnetId']
+            subnet_name = ''
+            subnet_type = ''
+            
+            for tag in subnet.get('Tags', []):
+                if tag['Key'] == 'Name':
+                    subnet_name = tag['Value']
+                elif tag['Key'] == 'Type':
+                    subnet_type = tag['Value']
+            
+            az = subnet['AvailabilityZone']
+            print_info(f"  - {subnet_id} ({subnet_name}) Type={subnet_type} in {az}")
+            
+            # Type 태그가 Private이거나 이름에 private가 포함된 경우
+            if subnet_type.lower() == 'private' or 'private' in subnet_name.lower():
+                private_subnets.append(subnet_id)
+            else:
+                public_subnets.append(subnet_id)
+        
+        # PRIVATE 서브넷이 있으면 사용, 없으면 PUBLIC 서브넷 사용
+        selected_subnets = private_subnets if private_subnets else public_subnets
+        
+        if len(selected_subnets) < 2:
+            # 서브넷이 2개 미만이면 모든 서브넷 사용
+            selected_subnets = [s['SubnetId'] for s in all_subnets]
+        
+        # 최소 2개 서브넷 필요 (다른 AZ에 있어야 함)
+        if len(selected_subnets) < 2:
+            print_warning(f"최소 2개의 서브넷이 필요합니다. 현재: {len(selected_subnets)}개")
+            return None
+        
+        subnet_type = "PRIVATE" if private_subnets else "PUBLIC"
+        print_success(f"{subnet_type} 서브넷 {len(selected_subnets[:2])}개 선택: {selected_subnets[:2]}")
+        
+        vpc_config = {
+            'SubnetIds': selected_subnets[:2],
             'SecurityGroupIds': [security_group_id]
         }
+        
+        print_success(f"VPC 설정 완료: VPC {vpc_id}")
+        return vpc_config
+        
     except Exception as e:
         print_warning(f"VPC 설정 가져오기 실패: {e}. VPC 없이 배포합니다.")
+        import traceback
+        print_warning(traceback.format_exc())
         return None
 
 def create_deployment_package(function_name):
@@ -231,7 +368,10 @@ def deploy_lambda_function(function_name, role_arn, vpc_config):
             'DB_USER': os.environ.get('DB_USER', 'postgres'),
             'DB_PASSWORD': os.environ.get('DB_PASSWORD', ''),
             'APP_REGION': os.environ.get('AWS_REGION', 'us-east-1'),  # AWS_REGION 대신 APP_REGION 사용
-            'S3_BUCKET_NAME': os.environ.get('S3_BUCKET_NAME', 'redhorse-s3-frontend-0126')
+            'S3_BUCKET_NAME': os.environ.get('S3_BUCKET_NAME', 'redhorse-s3-frontend-0126'),
+            'BEDROCK_AGENT_ID': os.environ.get('BEDROCK_AGENT_ID', ''),
+            'BEDROCK_AGENT_ALIAS_ID': os.environ.get('BEDROCK_AGENT_ALIAS_ID', ''),
+            'BEDROCK_REGION': os.environ.get('BEDROCK_REGION', 'us-east-1')
         }
     }
     
@@ -277,7 +417,7 @@ def deploy_lambda_function(function_name, role_arn, vpc_config):
             update_params = {
                 'FunctionName': lambda_function_name,
                 'Environment': environment,
-                'Timeout': 30,
+                'Timeout': 120,  # Bedrock Agent 응답 대기 시간 (120초)
                 'MemorySize': 512
             }
             
@@ -300,7 +440,7 @@ def deploy_lambda_function(function_name, role_arn, vpc_config):
                 'Handler': 'handler.lambda_handler',
                 'Code': {'ZipFile': zip_content},
                 'Environment': environment,
-                'Timeout': 30,
+                'Timeout': 120,  # Bedrock Agent 응답 대기 시간 (120초)
                 'MemorySize': 512,
                 'Publish': True
             }
