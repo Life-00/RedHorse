@@ -222,7 +222,7 @@ export default function RelaxationHubPage({ onNavigate }: Props) {
       </div>
 
       {/* Scroll Area */}
-      <div className="flex-1 overflow-y-auto pb-28">
+      <div className="flex-1 overflow-y-auto pb-32">
         {/* Player */}
         <div className="px-7 pt-6">
           <div

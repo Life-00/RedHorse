@@ -11,15 +11,16 @@ import {
   CheckCircle2,
   Circle,
   LogOut,
+  ListChecks,
 } from "lucide-react";
 import type { ScreenType } from "../../types/app";
 import BottomNav from "../../components/layout/BottomNav";
 import RiskBadge from "../../components/shared/RiskBadge";
 import { authSignOut } from "../../lib/auth";
 import { fetchAuthSession } from "aws-amplify/auth";
-import { userApi, scheduleApi, aiApi, fatigueApi, wellnessApi } from "../../lib/api";
+import { userApi, scheduleApi, aiApi, fatigueApi } from "../../lib/api";
 import { useCurrentUser, useToday } from "../../hooks/useApi";
-import type { UserProfile, Schedule, SleepPlan, FatigueAssessment, DailyChecklistTask } from "../../types/api";
+import type { UserProfile, Schedule, SleepPlan, FatigueAssessment } from "../../types/api";
 
 type Props = {
   onNavigate: (s: ScreenType) => void;
@@ -35,8 +36,36 @@ export default function HomeDashboard({ onNavigate }: Props) {
   const [todaySchedule, setTodaySchedule] = useState<Schedule | null>(null);
   const [sleepPlan, setSleepPlan] = useState<SleepPlan | null>(null);
   const [fatigueAssessment, setFatigueAssessment] = useState<FatigueAssessment | null>(null);
-  const [checklist, setChecklist] = useState<DailyChecklistTask[]>([]);
+  const [caffeineCutoff, setCaffeineCutoff] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // 점프스타트 더미 데이터 (프론트엔드에서만 표시)
+  const dummyJumpstartBlocks = [
+    {
+      id: 1,
+      block_name: "지금 바로",
+      block_type: "now" as const,
+      total_tasks: 3,
+      completed_tasks: 1,
+      total_duration: 25,
+    },
+    {
+      id: 2,
+      block_name: "필수 실행",
+      block_type: "must_do" as const,
+      total_tasks: 4,
+      completed_tasks: 0,
+      total_duration: 45,
+    },
+    {
+      id: 3,
+      block_name: "회복 루틴",
+      block_type: "recovery" as const,
+      total_tasks: 2,
+      completed_tasks: 0,
+      total_duration: 20,
+    },
+  ];
 
   // 데이터 로드
   useEffect(() => {
@@ -67,13 +96,13 @@ export default function HomeDashboard({ onNavigate }: Props) {
           scheduleResponse,
           sleepPlanResponse,
           fatigueResponse,
-          checklistResponse
+          caffeineResponse
         ] = await Promise.allSettled([
           userApi.getProfile(userId),
           scheduleApi.getSchedules(userId, today, today),
           aiApi.getSleepPlan(userId, today),
           fatigueApi.getFatigueAssessment(userId, today),
-          wellnessApi.getDailyChecklist(userId, today)
+          aiApi.getCaffeinePlan(userId, today)
         ]);
 
         // 프로필 데이터
@@ -130,11 +159,14 @@ export default function HomeDashboard({ onNavigate }: Props) {
           console.error('❌ 피로 위험도 로드 실패:', fatigueResponse.reason);
         }
 
-        // 체크리스트
-        if (checklistResponse.status === 'fulfilled') {
-          setChecklist(checklistResponse.value.checklist || []);
+        // 카페인 컷오프
+        if (caffeineResponse.status === 'fulfilled') {
+          const plan = caffeineResponse.value.caffeine_plan;
+          if (plan?.cutoff_time) {
+            setCaffeineCutoff(plan.cutoff_time);
+          }
         } else {
-          console.error('❌ 체크리스트 로드 실패:', checklistResponse.reason);
+          console.error('❌ 카페인 계획 로드 실패:', caffeineResponse.reason);
         }
 
       } catch (error) {
@@ -174,9 +206,9 @@ export default function HomeDashboard({ onNavigate }: Props) {
     if (!todaySchedule) return { label: "휴무", time: "오늘은 쉬는 날입니다" };
     
     const shiftLabels = {
-      day: "주간",
-      evening: "초저녁", 
-      night: "야간",
+      day: "주간 근무",
+      evening: "초저녁 근무", 
+      night: "야간 근무",
       off: "휴무"
     };
 
@@ -184,7 +216,7 @@ export default function HomeDashboard({ onNavigate }: Props) {
     
     // DB에서 가져온 실제 시간 사용
     const time = todaySchedule.start_time && todaySchedule.end_time 
-      ? `${todaySchedule.start_time} – ${todaySchedule.end_time} 근무 예정`
+      ? `${todaySchedule.start_time} – ${todaySchedule.end_time}`
       : todaySchedule.shift_type === 'off' 
         ? "오늘은 쉬는 날입니다"
         : "시간 미정";
@@ -222,10 +254,39 @@ export default function HomeDashboard({ onNavigate }: Props) {
 
   const scheduleInfo = getScheduleInfo();
   const fatigueInfo = getFatigueInfo();
+
+  // 점프스타트 진행률 계산 (더미 데이터 사용)
+  const getJumpstartProgress = () => {
+    const totalTasks = dummyJumpstartBlocks.reduce((sum, block) => sum + block.total_tasks, 0);
+    const completedTasks = dummyJumpstartBlocks.reduce((sum, block) => sum + block.completed_tasks, 0);
+    const percentage = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
+    
+    return { completed: completedTasks, total: totalTasks, percentage };
+  };
+
+  const jumpstartProgress = getJumpstartProgress();
+
+  // 카페인 컷오프 시간 포맷팅
+  const getCaffeineDisplay = () => {
+    if (!caffeineCutoff) return "계산 중...";
+    
+    // HH:MM 형식으로 표시
+    if (caffeineCutoff.includes('T')) {
+      return new Date(caffeineCutoff).toLocaleTimeString('ko-KR', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        hour12: false 
+      });
+    }
+    return caffeineCutoff;
+  };
   
   return (
     <div className="h-full flex flex-col bg-[#F8F9FD]">
-      <div className="px-7 pt-4 pb-6 bg-white rounded-b-[32px] shadow-sm">
+      {/* 전체 페이지를 스크롤 가능하게 변경 */}
+      <div className="flex-1 overflow-y-auto pb-32">
+        {/* Header - 이제 스크롤과 함께 움직임 */}
+        <div className="px-7 pt-4 pb-6 bg-white rounded-b-[32px] shadow-sm">
         <div className="flex justify-between items-start mb-6">
           <div>
             <div className="text-gray-400 text-[12px] font-black mb-1 uppercase tracking-widest">
@@ -264,18 +325,19 @@ export default function HomeDashboard({ onNavigate }: Props) {
           </div>
         </div>
 
-        <div className="flex items-center gap-4 p-4 bg-[#F8F7FF] rounded-[24px] border border-indigo-50 shadow-sm">
-          <div className="w-11 h-11 bg-[#5843E4] rounded-2xl flex items-center justify-center shadow-lg shadow-[#5843E4]/20">
-            <Moon className="w-5 h-5 text-white" />
-          </div>
-          <div className="flex-1">
-            <div className="text-[15px] font-black text-gray-900">오늘의 스케줄: {scheduleInfo.label}</div>
-            <div className="text-[12px] text-gray-400 font-bold">{scheduleInfo.time}</div>
+          <div className="flex items-center gap-4 p-4 bg-[#F8F7FF] rounded-[24px] border border-indigo-50 shadow-sm">
+            <div className="w-11 h-11 bg-[#5843E4] rounded-2xl flex items-center justify-center shadow-lg shadow-[#5843E4]/20">
+              <Moon className="w-5 h-5 text-white" />
+            </div>
+            <div className="flex-1">
+              <div className="text-[15px] font-black text-gray-900">오늘의 스케줄: {scheduleInfo.label}</div>
+              <div className="text-[12px] text-gray-400 font-bold">{scheduleInfo.time}</div>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="flex-1 px-7 pt-7 space-y-5 overflow-y-auto pb-36">
+        {/* Content - 헤더와 함께 스크롤됨 */}
+        <div className="px-7 pt-7 space-y-5">
         <motion.div
           whileTap={{ scale: 0.98 }}
           className="bg-gradient-to-br from-[#5843E4] to-[#7D6DF2] rounded-[32px] p-7 text-white shadow-2xl shadow-[#5843E4]/30"
@@ -306,7 +368,7 @@ export default function HomeDashboard({ onNavigate }: Props) {
               <Coffee className="w-5 h-5 text-amber-600" />
             </div>
             <div className="text-[12px] text-gray-400 font-black mb-1">카페인 컷오프</div>
-            <div className="text-[18px] font-black text-gray-900">계산 중...</div>
+            <div className="text-[18px] font-black text-gray-900">{getCaffeineDisplay()}</div>
           </div>
 
           <div className="bg-white p-5 rounded-[30px] shadow-sm border border-gray-50">
@@ -321,37 +383,83 @@ export default function HomeDashboard({ onNavigate }: Props) {
           </div>
         </div>
 
-        <div className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-50">
-          <h3 className="text-[16px] font-black mb-5 tracking-tight">오늘의 체크리스트</h3>
-          <div className="space-y-3.5">
-            {checklist.length > 0 ? (
-              checklist.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-4 p-4 bg-gray-50/50 rounded-2xl border border-gray-100/50"
-                >
-                  {item.completed ? (
-                    <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                  ) : (
-                    <Circle className="w-5 h-5 text-gray-200" />
-                  )}
-                  <span className={`text-[14px] font-bold ${item.completed ? "text-gray-300 line-through" : "text-gray-600"}`}>
-                    {item.task_name}
+          {/* 점프스타트 섹션 */}
+          <motion.div
+            whileTap={{ scale: 0.98 }}
+            onClick={() => onNavigate("daily-jumpstart")}
+            className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-50 cursor-pointer active:shadow-md transition-shadow"
+          >
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center">
+                  <ListChecks className="w-5 h-5 text-indigo-600" />
+                </div>
+                <h3 className="text-[16px] font-black tracking-tight">오늘의 점프스타트</h3>
+              </div>
+              <ChevronRight className="w-5 h-5 text-gray-400" />
+            </div>
+
+            <div className="space-y-4">
+              {/* 진행률 표시 */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[13px] font-bold text-gray-600">
+                    전체 진행률
+                  </span>
+                  <span className="text-[13px] font-black text-indigo-600">
+                    {jumpstartProgress.percentage}%
                   </span>
                 </div>
-              ))
-            ) : (
-              <div className="text-center py-4">
-                <div className="text-gray-400 text-[14px] font-bold">
-                  오늘의 체크리스트를 생성해보세요
+                <div className="relative h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="absolute inset-y-0 left-0 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-300"
+                    style={{ width: `${jumpstartProgress.percentage}%` }}
+                  />
+                </div>
+                <div className="text-[12px] text-gray-400 font-bold mt-1">
+                  {jumpstartProgress.completed} / {jumpstartProgress.total} 작업 완료
                 </div>
               </div>
-            )}
-          </div>
+
+              {/* 블록 요약 */}
+              <div className="space-y-2">
+                {dummyJumpstartBlocks.map((block) => {
+                  const blockProgress = block.total_tasks === 0 ? 0 : Math.round((block.completed_tasks / block.total_tasks) * 100);
+                  
+                  return (
+                    <div
+                      key={block.id}
+                      className="flex items-center justify-between p-3 bg-gray-50/50 rounded-xl"
+                    >
+                      <div className="flex items-center gap-3">
+                        {block.completed_tasks === block.total_tasks && block.total_tasks > 0 ? (
+                          <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+                        ) : (
+                          <Circle className="w-5 h-5 text-gray-300 flex-shrink-0" />
+                        )}
+                        <div>
+                          <div className="text-[13px] font-bold text-gray-900">
+                            {block.block_name}
+                          </div>
+                          <div className="text-[11px] text-gray-400 font-bold">
+                            {block.completed_tasks}/{block.total_tasks} 완료 · {block.total_duration}분
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-[12px] font-black text-gray-400">
+                        {blockProgress}%
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </motion.div>
         </div>
       </div>
-        <BottomNav active="home" onNavigate={onNavigate} />
+
+      <BottomNav active="home" onNavigate={onNavigate} />
     </div>
-    );
+  );
 }
 

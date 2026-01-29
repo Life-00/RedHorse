@@ -36,12 +36,12 @@ export default function DailyJumpstartPage({ onNavigate }: Props) {
         // 오늘의 점프스타트 조회
         const response = await jumpstartApi.getDailyJumpstart(userId, today);
         
-        if (response.jumpstart && response.jumpstart.length > 0) {
-          setBlocks(response.jumpstart);
+        if (response.jumpstart && response.jumpstart.blocks && response.jumpstart.blocks.length > 0) {
+          setBlocks(response.jumpstart.blocks);
         } else {
           // 점프스타트가 없으면 생성
           const createResponse = await jumpstartApi.createDailyJumpstart(userId, today);
-          setBlocks(createResponse.jumpstart || []);
+          setBlocks(createResponse.jumpstart?.blocks || []);
         }
         
       } catch (error) {
@@ -60,7 +60,7 @@ export default function DailyJumpstartPage({ onNavigate }: Props) {
     if (!userId) return;
     
     try {
-      await jumpstartApi.updateTaskCompletion(taskId, !currentCompleted);
+      await jumpstartApi.updateTaskCompletion(userId, taskId, !currentCompleted);
       
       // 로컬 상태 업데이트
       setBlocks(prevBlocks => 
@@ -108,7 +108,7 @@ export default function DailyJumpstartPage({ onNavigate }: Props) {
       </div>
 
       {/* Plan Blocks */}
-      <div className="flex-1 px-7 py-6 space-y-4 overflow-y-auto pb-28">
+      <div className="flex-1 px-7 py-6 space-y-4 overflow-y-auto pb-32">
         {blocks.length > 0 ? (
           blocks.map((block) => {
             const getIcon = (blockType: string) => {

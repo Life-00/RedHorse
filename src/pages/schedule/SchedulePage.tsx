@@ -116,15 +116,26 @@ export default function SchedulePage({ onNavigate }: Props) {
   const [cursor, setCursor] = useState(() => new Date(2026, 0, 1));
   const [selectedDate, setSelectedDate] = useState(() => new Date(2026, 0, 27));
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [workType, setWorkType] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
-  // 스케줄 데이터 로드
+  // 사용자 프로필 및 스케줄 데이터 로드
   useEffect(() => {
     if (!userId || userLoading) return;
 
-    const loadSchedules = async () => {
+    const loadData = async () => {
       try {
         setLoading(true);
+        
+        // 사용자 프로필 로드 (work_type 확인)
+        try {
+          const { userApi } = await import('../../lib/api');
+          const profileResponse = await userApi.getProfile(userId);
+          setWorkType(profileResponse.user.work_type || '');
+          console.log('✅ 사용자 근무 형태:', profileResponse.user.work_type);
+        } catch (profileError) {
+          console.warn('⚠️ 프로필 로드 실패:', profileError);
+        }
         
         // 데이터베이스에서 스케줄 로드
         try {
@@ -148,14 +159,14 @@ export default function SchedulePage({ onNavigate }: Props) {
         }
         
       } catch (error) {
-        console.error('❌ 스케줄 로드 실패:', error);
+        console.error('❌ 데이터 로드 실패:', error);
         setSchedules([]);
       } finally {
         setLoading(false);
       }
     };
 
-    loadSchedules();
+    loadData();
   }, [userId, userLoading, cursor]);
 
   // 스케줄 맵 생성 (날짜 키로 스케줄 매핑)
@@ -491,7 +502,7 @@ export default function SchedulePage({ onNavigate }: Props) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-7 pb-28">
+      <div className="flex-1 overflow-y-auto px-7 pb-32">
         {/* ✅ Monthly Calendar (그라데이션 + 카드) */}
         <div className="py-2 bg-gradient-to-br from-gray-50 to-white rounded-3xl">
           <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
@@ -642,6 +653,7 @@ export default function SchedulePage({ onNavigate }: Props) {
       <ScheduleRegisterModal
         open={registerOpen}
         onClose={() => setRegisterOpen(false)}
+        workType={workType}
         onApplyRange={applyRange}
         onUploadImage={uploadImage}
       />

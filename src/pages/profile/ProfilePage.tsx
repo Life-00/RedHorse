@@ -100,7 +100,7 @@ export default function ProfilePage({ onNavigate, onLogout }: Props) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 px-7 pt-6 pb-36 space-y-4 overflow-y-auto">
+      <div className="flex-1 px-7 pt-6 pb-32 space-y-4 overflow-y-auto">
         {/* 프로필 카드 */}
         <div className="bg-white rounded-[28px] p-6 shadow-sm border border-gray-50">
           <div className="flex items-center gap-4 mb-6">

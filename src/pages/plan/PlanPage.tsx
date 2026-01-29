@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Bell, HelpCircle, Moon, Zap,ArrowRight, AlertTriangle } from "lucide-react";
+import { Bell, HelpCircle, Moon, Zap } from "lucide-react";
 import type { ScreenType } from "../../types/app";
 import BottomNav from "../../components/layout/BottomNav";
 import { aiApi } from "../../lib/api";
@@ -110,22 +110,12 @@ export default function PlanPage({ onNavigate }: Props) {
         오늘의 최적화된 수면 시간표
       </p>
     </div>
-
-    {/* ✅ 피로 위험도 진입 버튼 */}
-    <button
-      onClick={() => onNavigate("fatigue-risk")}
-      className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-50 text-amber-700 border border-amber-100 font-bold text-[13px] active:scale-95"
-    >
-      <AlertTriangle className="w-4 h-4" />
-      피로 위험도
-      <ArrowRight className="w-4 h-4" />
-    </button>
   </div>
 </div>
 
 
       {/* ✅ 스크롤 영역(여기만 스크롤) */}
-      <div className="flex-1 overflow-y-auto px-7 py-8 pb-40">
+      <div className="flex-1 overflow-y-auto px-7 py-8 pb-32">
         <div className="relative">
           {/* Vertical line */}
           <div className="absolute left-[23px] top-4 bottom-4 w-0.5 bg-gray-100" />
@@ -159,7 +149,9 @@ export default function PlanPage({ onNavigate }: Props) {
                   <div className="flex-1 pt-1">
                     <div className="text-[13px] font-black text-gray-400 mb-1 tracking-wider uppercase">
                       {/* ISO 형식에서 시간만 추출 (HH:MM) */}
-                      {block.time && block.time.includes('T') ? new Date(block.time).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }) : block.time || '시간 미정'}
+                      {block.time && block.time.includes('T') 
+                        ? new Date(block.time).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+                        : block.time || '시간 미정'}
                     </div>
 
                     {block.label && (
@@ -189,15 +181,32 @@ export default function PlanPage({ onNavigate }: Props) {
                             메인 수면 세션
                           </span>
                         </div>
-                        <div className="text-[26px] font-black text-indigo-900 mb-1 leading-tight tracking-tight">
-                          {Math.round(sleepPlan.main_sleep_duration)}시간
-                        </div>
-                        <div className="text-[12px] text-indigo-700 font-medium opacity-80 uppercase tracking-wide">
-                          {sleepPlan.main_sleep_start && sleepPlan.main_sleep_start.includes('T') 
-                            ? new Date(sleepPlan.main_sleep_start).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
-                            : sleepPlan.main_sleep_start || '시간 미정'} – {sleepPlan.main_sleep_end && sleepPlan.main_sleep_end.includes('T')
-                            ? new Date(sleepPlan.main_sleep_end).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
-                            : sleepPlan.main_sleep_end || '시간 미정'}
+                        <div className="space-y-2">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-[11px] text-indigo-600 font-bold uppercase tracking-wide">권장 수면 시간</span>
+                            <span className="text-[24px] font-black text-indigo-900 leading-none">
+                              {Math.floor(sleepPlan.main_sleep_duration)}시간 {Math.round((sleepPlan.main_sleep_duration % 1) * 60)}분
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-[13px] font-bold text-indigo-700">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-indigo-500 uppercase tracking-wide">취침</span>
+                              <span className="text-[15px] font-black">
+                                {sleepPlan.main_sleep_start && sleepPlan.main_sleep_start.includes('T') 
+                                  ? new Date(sleepPlan.main_sleep_start).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+                                  : sleepPlan.main_sleep_start || '미정'}
+                              </span>
+                            </div>
+                            <span className="text-indigo-300">→</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-indigo-500 uppercase tracking-wide">기상</span>
+                              <span className="text-[15px] font-black">
+                                {sleepPlan.main_sleep_end && sleepPlan.main_sleep_end.includes('T')
+                                  ? new Date(sleepPlan.main_sleep_end).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+                                  : sleepPlan.main_sleep_end || '미정'}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </motion.div>
                     )}
@@ -214,15 +223,32 @@ export default function PlanPage({ onNavigate }: Props) {
                             회복 파워냅
                           </span>
                         </div>
-                        <div className="text-[26px] font-black text-purple-900 mb-1 leading-tight tracking-tight">
-                          {Math.round(sleepPlan.nap_duration * 60)}분
-                        </div>
-                        <div className="text-[12px] text-purple-700 font-medium opacity-80 uppercase tracking-wide">
-                          {sleepPlan.nap_start && sleepPlan.nap_start.includes('T')
-                            ? new Date(sleepPlan.nap_start).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
-                            : sleepPlan.nap_start} – {sleepPlan.nap_end && sleepPlan.nap_end.includes('T')
-                            ? new Date(sleepPlan.nap_end).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
-                            : sleepPlan.nap_end}
+                        <div className="space-y-2">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-[11px] text-purple-600 font-bold uppercase tracking-wide">파워냅 시간</span>
+                            <span className="text-[24px] font-black text-purple-900 leading-none">
+                              {Math.round(sleepPlan.nap_duration * 60)}분
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-[13px] font-bold text-purple-700">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-purple-500 uppercase tracking-wide">시작</span>
+                              <span className="text-[15px] font-black">
+                                {sleepPlan.nap_start && sleepPlan.nap_start.includes('T')
+                                  ? new Date(sleepPlan.nap_start).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+                                  : sleepPlan.nap_start || '미정'}
+                              </span>
+                            </div>
+                            <span className="text-purple-300">→</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-purple-500 uppercase tracking-wide">종료</span>
+                              <span className="text-[15px] font-black">
+                                {sleepPlan.nap_end && sleepPlan.nap_end.includes('T')
+                                  ? new Date(sleepPlan.nap_end).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+                                  : sleepPlan.nap_end || '미정'}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </motion.div>
                     )}

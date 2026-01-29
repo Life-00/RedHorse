@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 
 import type { ScreenType } from "../../types/app";
+import TopBar from "../../components/layout/TopBar";
 import BottomNav from "../../components/layout/BottomNav";
 import { aiApi } from "../../lib/api";
 import { useCurrentUser, useToday } from "../../hooks/useApi";
@@ -79,40 +80,31 @@ export default function CaffeineCutoffPage({ onNavigate }: Props) {
 
   if (loading) {
     return (
-      <div className="relative w-full h-full bg-[#F8F9FD] flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <div className="text-gray-600 font-bold">카페인 계획을 불러오는 중...</div>
+      <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden relative">
+        <TopBar title="카페인 컷오프" onNavigate={onNavigate} backTo="wellness" />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <div className="text-gray-600 font-bold">카페인 계획을 불러오는 중...</div>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="relative w-full bg-[#F8F9FD] rounded-3xl overflow-hidden border border-slate-100">
-      {/* Header */}
-      <div className="px-6 pt-6 pb-6 border-b border-gray-100 bg-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-[#1A1A1A] mb-1">
-              카페인 컷오프
-            </h1>
-            <p className="text-sm text-gray-500">
-              수면 품질을 위한 마지막 허용 시각
-            </p>
-          </div>
-
-          <button
-            onClick={() => onNavigate("wellness")}
-            className="px-4 py-2 rounded-full bg-indigo-50 text-[#5843E4] text-sm font-bold"
-          >
-            웰빙
-          </button>
-        </div>
-      </div>
+    <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden">
+      <TopBar title="카페인 컷오프" onNavigate={onNavigate} backTo="wellness" />
 
       {/* Content */}
-      <div className="px-6 py-8">
+      <div className="flex-1 overflow-y-auto pb-32">
+        {/* Header 설명 */}
+        <div className="px-7 pt-2 pb-6 border-b border-gray-100 bg-white">
+          <div className="text-[12px] font-black text-gray-400">수면 품질을 위한 마지막 허용 시각</div>
+          <div className="text-[20px] font-black text-gray-900 mt-1">카페인 컷오프</div>
+        </div>
+
+        <div className="px-6 py-8">
         {/* Clock */}
         <div className="relative w-64 h-64 mx-auto">
           <svg className="w-full h-full" viewBox="0 0 200 200">
@@ -235,7 +227,7 @@ export default function CaffeineCutoffPage({ onNavigate }: Props) {
       </div>
 
       {/* Alternatives */}
-      <div className="px-6 pb-32">
+      <div className="px-6 pb-6">
         <div className="text-sm font-medium text-gray-700 mb-3">
           대체 각성 방법
         </div>
@@ -278,8 +270,8 @@ export default function CaffeineCutoffPage({ onNavigate }: Props) {
           </div>
         </div>
       </div>
+      </div>
 
-      {/* BottomNav */}
       <BottomNav active="wellness" onNavigate={onNavigate} />
     </div>
   );

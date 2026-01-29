@@ -91,7 +91,7 @@ export default function WellnessPage({
       </div>
 
       {/* Content */}
-      <div className="flex-1 px-7 pt-6 pb-36 space-y-4 overflow-y-auto">
+      <div className="flex-1 px-7 pt-6 pb-32 space-y-4 overflow-y-auto">
         {loading ? (
           <div className="text-center py-8">
             <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -99,39 +99,7 @@ export default function WellnessPage({
           </div>
         ) : (
           <>
-            {/* Caffeine Cutoff */}
-            <button
-              onClick={() => onNavigate("caffeine")}
-              className="w-full bg-white rounded-[28px] p-5 shadow-sm border border-gray-50 text-left active:scale-[0.99] transition"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center">
-                  <Coffee className="w-6 h-6 text-amber-600" />
-                </div>
-                <div className="flex-1">
-                  <div className="text-[15px] font-black text-gray-900">
-                    카페인 컷오프
-                  </div>
-                  <div className="text-[12px] text-gray-400 font-bold">
-                    수면 품질을 위한 마지막 허용 시각
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5 text-gray-300" />
-              </div>
-
-              <div className="mt-4 p-4 rounded-[22px] bg-amber-50/60 border border-amber-100">
-                <div className="flex items-center justify-between">
-                  <div className="text-[12px] text-amber-700 font-bold">
-                    오늘 권장 컷오프
-                  </div>
-                  <div className="text-[16px] font-black text-amber-900">
-                    {caffeinePlan ? caffeinePlan.cutoff_time : '계산 중...'}
-                  </div>
-                </div>
-              </div>
-            </button>
-
-            {/* Fatigue Risk Score */}
+            {/* Fatigue Risk Score - 최상단 배치 */}
             <button
               onClick={() => onNavigate("fatigue-risk")}
               className="w-full bg-white rounded-[28px] p-5 shadow-sm border border-gray-50 text-left active:scale-[0.99] transition"
@@ -142,10 +110,10 @@ export default function WellnessPage({
                 </div>
                 <div className="flex-1">
                   <div className="text-[15px] font-black text-gray-900">
-                    피로 위험도 점수
+                    피로 위험도
                   </div>
                   <div className="text-[12px] text-gray-400 font-bold">
-                    오늘의 피로 수준과 관리 방법
+                    오늘의 피로 수준과 안전 관리
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-gray-300" />
@@ -175,6 +143,38 @@ export default function WellnessPage({
                     }`}>
                       {fatigueLevel.text}
                     </div>
+                  </div>
+                </div>
+              </div>
+            </button>
+
+            {/* Caffeine Cutoff */}
+            <button
+              onClick={() => onNavigate("caffeine")}
+              className="w-full bg-white rounded-[28px] p-5 shadow-sm border border-gray-50 text-left active:scale-[0.99] transition"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center">
+                  <Coffee className="w-6 h-6 text-amber-600" />
+                </div>
+                <div className="flex-1">
+                  <div className="text-[15px] font-black text-gray-900">
+                    카페인 컷오프
+                  </div>
+                  <div className="text-[12px] text-gray-400 font-bold">
+                    수면 품질을 위한 마지막 허용 시각
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-300" />
+              </div>
+
+              <div className="mt-4 p-4 rounded-[22px] bg-amber-50/60 border border-amber-100">
+                <div className="flex items-center justify-between">
+                  <div className="text-[12px] text-amber-700 font-bold">
+                    오늘 권장 컷오프
+                  </div>
+                  <div className="text-[16px] font-black text-amber-900">
+                    {caffeinePlan ? caffeinePlan.cutoff_time : '계산 중...'}
                   </div>
                 </div>
               </div>

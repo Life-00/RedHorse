@@ -147,9 +147,9 @@ export default function FatigueRiskScorePage({ onNavigate }: Props) {
 
   return (
     <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden relative">
-      <TopBar title="피로 위험도" onNavigate={onNavigate} backTo="home" />
+      <TopBar title="피로 위험도" onNavigate={onNavigate} backTo="wellness" />
 
-      <div className="flex-1 overflow-y-auto pb-28">
+      <div className="flex-1 overflow-y-auto pb-32">
         {/* Header 설명 */}
         <div className="px-7 pt-2 pb-6 border-b border-gray-100 bg-white">
           <div className="text-[12px] font-black text-gray-400">오늘의 안전 상태 평가</div>
@@ -273,16 +273,16 @@ export default function FatigueRiskScorePage({ onNavigate }: Props) {
                 level === "high" ? "bg-rose-600" :
                 "bg-amber-600"
               }`}
-              onClick={() => onNavigate("plan")}
+              onClick={() => onNavigate("wellness")}
             >
-              오늘 리스크 줄이기
+              웰빙으로 돌아가기
               <ArrowRight className="w-5 h-5" />
             </button>
           </div>
         </div>
       </div>
 
-      <BottomNav active="plan" onNavigate={onNavigate} />
+      <BottomNav active="wellness" onNavigate={onNavigate} />
     </div>
   );
 }

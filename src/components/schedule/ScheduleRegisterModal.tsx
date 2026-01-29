@@ -8,6 +8,7 @@ export type ShiftType = "day" | "evening" | "night" | "off";
 type Props = {
   open: boolean;
   onClose: () => void;
+  workType?: string; // 사용자의 근무 형태
 
   // 직접 등록 적용
   onApplyRange: (payload: { start: string; end: string; shift: ShiftType }) => void;
@@ -33,6 +34,7 @@ function addDaysISO(iso: string, days: number) {
 export default function ScheduleRegisterModal({
   open,
   onClose,
+  workType,
   onApplyRange,
   onUploadImage,
 }: Props) {
@@ -47,6 +49,34 @@ export default function ScheduleRegisterModal({
   // 업로드 폼
   const [file, setFile] = useState<File | null>(null);
   const [userGroup, setUserGroup] = useState<string>("1조");
+
+  // 근무 형태에 따른 교대 유형 필터링
+  const availableShifts = useMemo(() => {
+    const allShifts = [
+      { id: "day" as const, label: "주간" },
+      { id: "evening" as const, label: "중간" },
+      { id: "night" as const, label: "야간" },
+      { id: "off" as const, label: "휴무" },
+    ];
+
+    // 2교대: 주간, 야간, 휴무만
+    if (workType === '2shift' || workType === 'day') {
+      return allShifts.filter(s => s.id === 'day' || s.id === 'night' || s.id === 'off');
+    }
+    
+    // 3교대: 모든 교대 유형
+    if (workType === '3shift' || workType === 'evening') {
+      return allShifts;
+    }
+    
+    // 고정 야간: 야간, 휴무만
+    if (workType === 'fixed_night' || workType === 'night') {
+      return allShifts.filter(s => s.id === 'night' || s.id === 'off');
+    }
+    
+    // 불규칙 또는 기타: 모든 교대 유형
+    return allShifts;
+  }, [workType]);
 
   const canApply = start && end && new Date(start) <= new Date(end);
   const canUpload = file && userGroup.trim().length > 0;
@@ -161,13 +191,8 @@ export default function ScheduleRegisterModal({
 
                     <div className="mt-3">
                       <div className="text-[11px] font-black text-gray-400 mb-2">근무</div>
-                      <div className="grid grid-cols-4 gap-2">
-                        {([
-                          { id: "day", label: "주간" },
-                          { id: "evening", label: "중간" },
-                          { id: "night", label: "야간" },
-                          { id: "off", label: "휴무" },
-                        ] as const).map((opt) => {
+                      <div className={`grid gap-2 ${availableShifts.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                        {availableShifts.map((opt) => {
                           const active = shift === opt.id;
                           return (
                             <button
