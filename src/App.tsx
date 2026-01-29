@@ -37,6 +37,7 @@ const LOGGED_OUT_PAGES: ScreenType[] = ["home-loggedout", "login", "signup"];
 export default function App() {
   const [screen, setScreen] = useState<ScreenType>("home-loggedout"); // 초기 화면을 로그아웃 홈으로 변경
   const [isAuthed, setIsAuthed] = useState(false);
+  const [homeKey, setHomeKey] = useState(0); // 홈 화면 강제 리렌더링용 key
 
   const [prefs, setPrefs] = useState<UserPreferences>({
     workType: "",
@@ -46,6 +47,14 @@ export default function App() {
   });
 
   const [pendingEmail, setPendingEmail] = useState("");
+
+  // 화면 전환 시 홈으로 돌아가면 key 업데이트
+  const navigateToScreen = (newScreen: ScreenType) => {
+    if (newScreen === "home") {
+      setHomeKey(prev => prev + 1); // 홈으로 돌아갈 때마다 key 증가
+    }
+    setScreen(newScreen);
+  };
 
   // prefs 로드
   useEffect(() => {
@@ -77,18 +86,18 @@ export default function App() {
 
       // ✅ 로그인 안된 상태면 항상 홈 로그아웃 화면
       if (!ok) {
-        setScreen("home-loggedout");
+        navigateToScreen("home-loggedout");
         return;
       }
 
       // ✅ 로그인 했는데 온보딩 미완료면 온보딩 화면
       if (!prefs.onboardingCompleted) {
-        setScreen("onboarding-1");
+        navigateToScreen("onboarding-1");
         return;
       }
 
       // ✅ 로그인 했고 온보딩 완료면 홈 대시보드
-      setScreen("home");
+      navigateToScreen("home");
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefs.onboardingCompleted]);
@@ -102,7 +111,7 @@ export default function App() {
   const handleOnboardingComplete = () => {
     updatePrefs({ onboardingCompleted: true });
     // 온보딩 완료 후 로그인 상태에 따라 적절한 화면으로 이동
-    setScreen(isAuthed ? "home" : "home-loggedout");
+    navigateToScreen(isAuthed ? "home" : "home-loggedout");
   };
 
   const handleLoginSuccess = async () => {
@@ -152,15 +161,15 @@ export default function App() {
     
     // 온보딩 완료 여부에 따라 화면 전환
     if (prefs.onboardingCompleted) {
-      setScreen("home");
+      navigateToScreen("home");
     } else {
-      setScreen("onboarding-1");
+      navigateToScreen("onboarding-1");
     }
   };
 
   const handleLogoutDone = () => {
     setIsAuthed(false);
-    setScreen("home-loggedout");
+    navigateToScreen("home-loggedout");
   };
 
   // confirm에 email 없으면 signup으로 보내기(안전장치) - 더 이상 필요 없음
@@ -186,7 +195,7 @@ export default function App() {
             <OnboardingStep1
               prefs={prefs}
               updatePrefs={updatePrefs}
-              onNext={() => setScreen("onboarding-2")}
+              onNext={() => navigateToScreen("onboarding-2")}
             />
           )}
 
@@ -194,26 +203,26 @@ export default function App() {
             <OnboardingStep2
               prefs={prefs}
               updatePrefs={updatePrefs}
-              onPrev={() => setScreen("onboarding-1")}
+              onPrev={() => navigateToScreen("onboarding-1")}
               onComplete={handleOnboardingComplete}
             />
           )}
 
           {/* Auth */}
           {screen === "home-loggedout" && (
-            <HomeDashboardLoggedOut onNavigate={setScreen} />
+            <HomeDashboardLoggedOut onNavigate={navigateToScreen} />
           )}
 
           {screen === "login" && (
             <LoginScreen
-              onNavigate={setScreen}
+              onNavigate={navigateToScreen}
               onLoginSuccess={handleLoginSuccess}
             />
           )}
 
           {screen === "signup" && (
             <SignUpScreen
-              onNavigate={setScreen}
+              onNavigate={navigateToScreen}
               onSignedUp={(email) => {
                 // 회원가입 완료 후 로그인 화면으로 이동 (SignUpScreen에서 처리)
                 setPendingEmail(email);
@@ -224,36 +233,37 @@ export default function App() {
           {/* Home */}
           {screen === "home" && (
             <HomeDashboard
-              onNavigate={setScreen}
+              key={homeKey}
+              onNavigate={navigateToScreen}
             />
           )}
 
           {/* Main Pages */}
-          {screen === "wellness" && <WellnessPage onNavigate={setScreen} />}
-          {screen === "schedule" && <SchedulePage onNavigate={setScreen} />}
-          {screen === "plan" && <PlanPage onNavigate={setScreen} />}
+          {screen === "wellness" && <WellnessPage onNavigate={navigateToScreen} />}
+          {screen === "schedule" && <SchedulePage onNavigate={navigateToScreen} />}
+          {screen === "plan" && <PlanPage onNavigate={navigateToScreen} />}
 
           {/* Plan sub pages */}
           {screen === "fatigue-risk-score" && (
-            <FatigueRiskScorePage onNavigate={setScreen} />
+            <FatigueRiskScorePage onNavigate={navigateToScreen} />
           )}
           {screen === "daily-jumpstart" && (
-            <DailyJumpstartPage onNavigate={setScreen} />
+            <DailyJumpstartPage onNavigate={navigateToScreen} />
           )}
 
           {/* Profile / Settings */}
           {screen === "profile" && (
             <ProfilePage
-              onNavigate={setScreen}
+              onNavigate={navigateToScreen}
               onLogout={handleLogoutDone}
             />
           )}
 
           {/* Wellness sub pages */}
           {screen === "caffeine-cutoff" && (
-            <CaffeineCutoffPage onNavigate={setScreen} />
+            <CaffeineCutoffPage onNavigate={navigateToScreen} />
           )}
-          {screen === "relax" && <RelaxationHubPage onNavigate={setScreen} />}
+          {screen === "relax" && <RelaxationHubPage onNavigate={navigateToScreen} />}
         </motion.div>
       </AnimatePresence>
 

@@ -115,7 +115,7 @@ export default function PlanPage({ onNavigate }: Props) {
         </svg>
       </button>
       <div>
-        <h1 className="text-[24px] font-bold text-[#1A1A1A] mb-1">수면창 계획</h1>
+        <h1 className="text-[24px] font-bold text-[#1A1A1A] mb-1">수면 가이드</h1>
         <p className="text-[14px] text-[#8E8E8E] font-medium">
           오늘의 최적화된 수면 시간표
         </p>

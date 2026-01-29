@@ -37,26 +37,14 @@ export default function WellnessPage({
         if (caffeineResponse.status === 'fulfilled') {
           setCaffeinePlan(caffeineResponse.value.caffeine_plan);
         } else {
-          // 카페인 계획이 없으면 생성
-          try {
-            const createResponse = await aiApi.generateCaffeinePlan(userId, today);
-            setCaffeinePlan(createResponse.caffeine_plan);
-          } catch (error) {
-            console.error('카페인 계획 생성 실패:', error);
-          }
+          console.error('카페인 계획 로드 실패:', caffeineResponse.reason);
         }
 
         // 피로 위험도 점수
         if (fatigueResponse.status === 'fulfilled') {
           setFatigueScore(fatigueResponse.value.assessment.risk_score);
         } else {
-          // 피로 점수가 없으면 생성
-          try {
-            const createResponse = await fatigueApi.calculateFatigueRisk(userId, today);
-            setFatigueScore(createResponse.assessment.risk_score);
-          } catch (error) {
-            console.error('피로 점수 생성 실패:', error);
-          }
+          console.error('피로 점수 로드 실패:', fatigueResponse.reason);
         }
 
       } catch (error) {
@@ -110,9 +98,9 @@ export default function WellnessPage({
           </div>
         ) : (
           <>
-            {/* Fatigue Risk Score - 최상단 배치 */}
+            {/* 피로 위험도 */}
             <button
-              onClick={() => onNavigate("fatigue-risk")}
+              onClick={() => onNavigate("fatigue-risk-score")}
               className="w-full bg-white rounded-[28px] p-5 shadow-sm border border-gray-50 text-left active:scale-[0.99] transition"
             >
               <div className="flex items-center gap-4">
@@ -159,9 +147,9 @@ export default function WellnessPage({
               </div>
             </button>
 
-            {/* Caffeine Cutoff */}
+            {/* 카페인 컷오프 */}
             <button
-              onClick={() => onNavigate("caffeine")}
+              onClick={() => onNavigate("caffeine-cutoff")}
               className="w-full bg-white rounded-[28px] p-5 shadow-sm border border-gray-50 text-left active:scale-[0.99] transition"
             >
               <div className="flex items-center gap-4">
@@ -191,7 +179,7 @@ export default function WellnessPage({
               </div>
             </button>
 
-            {/* ✅ Relaxation Hub */}
+            {/* 이완 & 휴식 */}
             <button
               onClick={() => onNavigate("relax")}
               className="w-full bg-white rounded-[28px] p-5 shadow-sm border border-gray-50 text-left active:scale-[0.99] transition"

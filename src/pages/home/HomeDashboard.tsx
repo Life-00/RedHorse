@@ -18,8 +18,8 @@ import BottomNav from "../../components/layout/BottomNav";
 import RiskBadge from "../../components/shared/RiskBadge";
 import { authSignOut } from "../../lib/auth";
 import { fetchAuthSession } from "aws-amplify/auth";
-import { userApi, scheduleApi, aiApi, fatigueApi } from "../../lib/api";
-import { useCurrentUser, useToday } from "../../hooks/useApi";
+import { userApi, scheduleApi, aiApi, fatigueApi, apiUtils } from "../../lib/api";
+import { useCurrentUser } from "../../hooks/useApi";
 import type { UserProfile, Schedule, SleepPlan, FatigueAssessment } from "../../types/api";
 import { formatTimeToHHMM, SHIFT_TYPE_FULL_LABELS, getAllowedShiftTypes, isValidShiftType } from "../../utils/shiftTypeUtils";
 
@@ -29,7 +29,8 @@ type Props = {
 
 export default function HomeDashboard({ onNavigate }: Props) {
   const { userId, loading: userLoading } = useCurrentUser();
-  const today = useToday();
+  // 매번 새로운 날짜를 계산하도록 변경 (useToday 대신)
+  const today = apiUtils.getTodayString();
   
   // 상태 관리
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -75,6 +76,10 @@ export default function HomeDashboard({ onNavigate }: Props) {
     const loadDashboardData = async () => {
       try {
         setLoading(true);
+        
+        // 매번 최신 날짜 계산
+        const currentDate = apiUtils.getTodayString();
+        console.log('🔍 홈 화면 데이터 로드 - 현재 날짜:', currentDate);
 
         // Cognito에서 사용자 이름 가져오기
         try {
@@ -100,10 +105,10 @@ export default function HomeDashboard({ onNavigate }: Props) {
           caffeineResponse
         ] = await Promise.allSettled([
           userApi.getProfile(userId),
-          scheduleApi.getSchedules(userId, today, today),
-          aiApi.getSleepPlan(userId, today),
-          fatigueApi.getFatigueAssessment(userId, today),
-          aiApi.getCaffeinePlan(userId, today)
+          scheduleApi.getSchedules(userId, currentDate, currentDate),
+          aiApi.getSleepPlan(userId, currentDate),
+          fatigueApi.getFatigueAssessment(userId, currentDate),
+          aiApi.getCaffeinePlan(userId, currentDate)
         ]);
 
         // 프로필 데이터
@@ -141,7 +146,9 @@ export default function HomeDashboard({ onNavigate }: Props) {
         // 오늘 스케줄
         if (scheduleResponse.status === 'fulfilled') {
           const schedules = scheduleResponse.value.schedules;
-          setTodaySchedule(schedules.length > 0 ? schedules[0] : null);
+          const todayScheduleData = schedules.length > 0 ? schedules[0] : null;
+          setTodaySchedule(todayScheduleData);
+          console.log('✅ 오늘 스케줄 로드 성공:', todayScheduleData);
         } else {
           console.error('❌ 스케줄 로드 실패:', scheduleResponse.reason);
         }
@@ -178,7 +185,40 @@ export default function HomeDashboard({ onNavigate }: Props) {
     };
 
     loadDashboardData();
-  }, [userId, userLoading, today]);
+  }, [userId, userLoading]); // today 의존성 제거 - 매번 새로 계산하므로
+
+  // 화면이 표시될 때마다 데이터 새로고침 (visibility API 사용)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && userId && !userLoading) {
+        // 화면이 다시 보일 때 데이터 새로고침
+        const loadDashboardData = async () => {
+          try {
+            const currentDate = apiUtils.getTodayString();
+            console.log('🔄 홈 화면 스케줄 새로고침 시작 - 날짜:', currentDate);
+            
+            const [scheduleResponse] = await Promise.allSettled([
+              scheduleApi.getSchedules(userId, currentDate, currentDate),
+            ]);
+
+            if (scheduleResponse.status === 'fulfilled') {
+              const schedules = scheduleResponse.value.schedules;
+              const todayScheduleData = schedules.length > 0 ? schedules[0] : null;
+              setTodaySchedule(todayScheduleData);
+              console.log('✅ 홈 화면 스케줄 새로고침 완료:', todayScheduleData);
+            }
+          } catch (error) {
+            console.error('❌ 스케줄 새로고침 실패:', error);
+          }
+        };
+        
+        loadDashboardData();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [userId, userLoading]);
 
   const handleLogout = async () => {
     try {
@@ -341,7 +381,7 @@ export default function HomeDashboard({ onNavigate }: Props) {
           onClick={() => onNavigate("plan")}
           className="bg-gradient-to-br from-[#5843E4] to-[#7D6DF2] rounded-[32px] p-7 text-white shadow-2xl shadow-[#5843E4]/30 cursor-pointer"
         >
-          <div className="text-[14px] opacity-80 font-bold mb-1">권장 수면창</div>
+          <div className="text-[14px] opacity-80 font-bold mb-1">수면 가이드</div>
           <div className="text-[30px] font-black mb-6 tracking-tight">{getSleepWindow()}</div>
           <div className="h-[1px] bg-white/20 mb-6" />
           <div className="flex justify-between items-center text-[13.5px] font-black">
