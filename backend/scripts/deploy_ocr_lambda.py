@@ -37,12 +37,27 @@ def load_env_file():
         print_error(f".env 파일을 찾을 수 없습니다: {env_path}")
         return
     
-    with open(env_path, 'r', encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith('#') and '=' in line:
-                key, value = line.split('=', 1)
-                os.environ[key] = value.strip()
+    # 다양한 인코딩 시도
+    encodings = ['utf-8', 'utf-16', 'cp1252', 'latin-1']
+    content = None
+    
+    for encoding in encodings:
+        try:
+            with open(env_path, 'r', encoding=encoding) as f:
+                content = f.read()
+            break
+        except UnicodeDecodeError:
+            continue
+    
+    if not content:
+        print_error(f".env 파일을 읽을 수 없습니다")
+        return
+    
+    for line in content.split('\n'):
+        line = line.strip()
+        if line and not line.startswith('#') and '=' in line:
+            key, value = line.split('=', 1)
+            os.environ[key.strip()] = value.strip()
     
     print_success(".env 파일 로드 완료")
 

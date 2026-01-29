@@ -30,13 +30,29 @@ def print_error(msg):
 # 환경 변수 로드
 def load_env_file():
     env_path = Path(__file__).parent.parent / '.env'
-    if env_path.exists():
-        with open(env_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
-                    os.environ[key] = value
+    if not env_path.exists():
+        return
+    
+    # 다양한 인코딩 시도
+    encodings = ['utf-8', 'utf-16', 'cp1252', 'latin-1']
+    content = None
+    
+    for encoding in encodings:
+        try:
+            with open(env_path, 'r', encoding=encoding) as f:
+                content = f.read()
+            break
+        except UnicodeDecodeError:
+            continue
+    
+    if not content:
+        return
+    
+    for line in content.split('\n'):
+        line = line.strip()
+        if line and not line.startswith('#') and '=' in line:
+            key, value = line.split('=', 1)
+            os.environ[key.strip()] = value.strip()
 
 load_env_file()
 

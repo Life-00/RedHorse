@@ -87,6 +87,7 @@ iam_client = boto3.client('iam', region_name=os.environ.get('AWS_REGION', 'us-ea
 ec2_client = boto3.client('ec2', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
 
 # Lambda 함수 목록
+# 주의: biopathway_calculator와 ocr_vision은 Bedrock Agent Action Group으로 별도 배포
 LAMBDA_FUNCTIONS = [
     'user_management',
     'schedule_management',
@@ -94,6 +95,12 @@ LAMBDA_FUNCTIONS = [
     'fatigue_assessment',
     'jumpstart',
     'wellness'
+]
+
+# Bedrock Agent Action Group Lambda 함수 (별도 배포 필요)
+BEDROCK_ACTION_LAMBDAS = [
+    'biopathway_calculator',  # deploy_biopathway.py로 배포
+    'ocr_vision'              # deploy_ocr_lambda.py로 배포
 ]
 
 def get_or_create_lambda_role():
@@ -356,10 +363,17 @@ def create_deployment_package(function_name):
         zip_path.unlink()
     
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        # handler.py 추가
+        # handler.py 또는 lambda_function.py 추가
         handler_path = lambda_dir / 'handler.py'
+        lambda_function_path = lambda_dir / 'lambda_function.py'
+        
         if handler_path.exists():
             zipf.write(handler_path, 'handler.py')
+        elif lambda_function_path.exists():
+            # biopathway_calculator 같은 경우
+            zipf.write(lambda_function_path, 'lambda_function.py')
+        else:
+            raise FileNotFoundError(f"handler.py 또는 lambda_function.py를 찾을 수 없습니다: {lambda_dir}")
         
         # utils 디렉토리 추가
         if utils_dir.exists():
@@ -420,6 +434,12 @@ def deploy_lambda_function(function_name, role_arn, vpc_config):
     
     # Lambda 함수 이름
     lambda_function_name = f'shift-worker-wellness-{function_name}'
+    
+    # Handler 경로 결정 (biopathway_calculator는 lambda_function.lambda_handler)
+    if function_name == 'biopathway_calculator':
+        handler = 'lambda_function.lambda_handler'
+    else:
+        handler = 'handler.lambda_handler'
     
     # 환경 변수 설정
     environment = {
@@ -502,7 +522,7 @@ def deploy_lambda_function(function_name, role_arn, vpc_config):
                 'FunctionName': lambda_function_name,
                 'Runtime': 'python3.11',
                 'Role': role_arn,
-                'Handler': 'handler.lambda_handler',
+                'Handler': handler,  # 동적으로 설정된 handler 사용
                 'Code': {'ZipFile': zip_content},
                 'Environment': environment,
                 'Timeout': 120,  # Bedrock Agent 응답 대기 시간 (120초)
@@ -558,10 +578,16 @@ def main():
         for func in deployed_functions:
             print(f"  - {func}")
         
+        print(f"\n{Colors.YELLOW}⚠️  별도 배포 필요:{Colors.END}")
+        print("  Bedrock Agent Action Group Lambda 함수:")
+        print("  - biopathway_calculator (python backend/scripts/deploy_biopathway.py)")
+        print("  - ocr_vision (python backend/scripts/deploy_ocr_lambda.py)")
+        
         print(f"\n{Colors.YELLOW}다음 단계:{Colors.END}")
-        print("1. API Gateway 설정")
-        print("2. Lambda 함수와 API Gateway 연결")
-        print("3. 프론트엔드 환경 변수에 API Gateway URL 설정\n")
+        print("1. Bedrock Agent Action Group Lambda 배포 (위 명령어 실행)")
+        print("2. API Gateway 설정")
+        print("3. Lambda 함수와 API Gateway 연결")
+        print("4. 프론트엔드 환경 변수에 API Gateway URL 설정\n")
         
     except Exception as e:
         print_error(f"배포 실패: {e}")

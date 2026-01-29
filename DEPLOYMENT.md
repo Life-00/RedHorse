@@ -24,16 +24,24 @@
 ## 배포 구조
 
 ### 백엔드
-- **Lambda 함수**: 6개의 마이크로서비스
-  - user_management
-  - schedule_management
-  - ai_services
-  - fatigue_assessment
-  - jumpstart
-  - wellness
+- **Lambda 함수**: 8개의 마이크로서비스
+  - **API Gateway 연결 (6개)**:
+    - user_management
+    - schedule_management
+    - ai_services
+    - fatigue_assessment
+    - jumpstart
+    - wellness
+  - **Bedrock Agent Action Group (2개)**:
+    - biopathway_calculator (Bio-Coach Agent용)
+    - ocr_vision (OCR Agent용)
 - **API Gateway**: HTTP API (REST API)
 - **RDS**: PostgreSQL 데이터베이스
 - **VPC**: Lambda와 RDS 연결
+- **Bedrock Agents**: 3개
+  - RAG Chatbot Agent (9NPCFXV4WV)
+  - OCR Agent (BTSIJ4YCPQ)
+  - Bio-Coach Agent (1XOE4OAMLR)
 
 ### 프론트엔드
 - **S3**: 정적 파일 호스팅
@@ -61,10 +69,17 @@ python scripts/deploy_all.py
 #### 2.1 백엔드만 배포
 
 ```bash
-# Lambda 함수 배포
+# 1. 일반 Lambda 함수 배포 (6개)
 python backend/scripts/deploy_lambda.py
 
-# API Gateway 설정
+# 2. Bedrock Agent Action Group Lambda 배포 (2개)
+python backend/scripts/deploy_biopathway.py
+python backend/scripts/deploy_ocr_lambda.py
+
+# 3. AI Services Lambda 환경변수 복원 (중요!)
+python backend/scripts/deploy_ai_services_only.py
+
+# 4. API Gateway 설정
 python backend/scripts/setup_api_gateway.py
 ```
 
