@@ -146,7 +146,7 @@ export default function FatigueRiskScorePage({ onNavigate }: Props) {
   }
 
   return (
-    <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden relative">
+    <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden">
       <TopBar 
         title="피로 위험도" 
         subtitle="오늘의 안전 상태 평가"

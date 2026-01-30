@@ -72,7 +72,7 @@ export default function DailyJumpstartPage({ onNavigate }: Props) {
   if (loading) {
     return (
       <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden relative">
-        <TopBar title="오늘의 점프스타트" onNavigate={onNavigate} backTo="plan" />
+        <TopBar title="오늘의 점프스타트" onNavigate={onNavigate} backTo="home" />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -84,8 +84,8 @@ export default function DailyJumpstartPage({ onNavigate }: Props) {
   }
 
   return (
-    <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden relative">
-      <TopBar title="오늘의 점프스타트" onNavigate={onNavigate} backTo="plan" />
+    <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden">
+      <TopBar title="오늘의 점프스타트" onNavigate={onNavigate} backTo="home" />
 
       {/* Header */}
       <div className="shrink-0 px-7 pt-3 pb-6 border-b border-gray-100 bg-white">
@@ -209,7 +209,7 @@ export default function DailyJumpstartPage({ onNavigate }: Props) {
         </div>
       </div>
 
-      <BottomNav active="plan" onNavigate={onNavigate} />
+      <BottomNav active="home" onNavigate={onNavigate} />
     </div>
   );
 }

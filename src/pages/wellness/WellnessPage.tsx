@@ -57,13 +57,12 @@ export default function WellnessPage({
     loadWellnessData();
   }, [userId, userLoading, today]);
 
-  // 피로 위험도 레벨 계산
+  // 피로 위험도 레벨 계산 (백엔드와 동일한 기준)
   const getFatigueLevel = (score: number | null) => {
     if (score === null) return { text: '계산 중...', color: 'gray' };
-    if (score < 30) return { text: '낮음', color: 'green' };
-    if (score < 60) return { text: '보통', color: 'yellow' };
-    if (score < 80) return { text: '높음', color: 'orange' };
-    return { text: '매우 높음', color: 'red' };
+    if (score <= 30) return { text: '낮음', color: 'green' };
+    if (score <= 60) return { text: '보통', color: 'yellow' };
+    return { text: '높음', color: 'red' };
   };
 
   const fatigueLevel = getFatigueLevel(fatigueScore);
@@ -125,19 +124,17 @@ export default function WellnessPage({
                   </div>
                   <div className="flex items-center gap-2">
                     <div className={`text-[16px] font-black ${
-                      fatigueLevel.color === 'green' ? 'text-green-900' :
-                      fatigueLevel.color === 'yellow' ? 'text-yellow-900' :
-                      fatigueLevel.color === 'orange' ? 'text-orange-900' :
-                      fatigueLevel.color === 'red' ? 'text-red-900' :
+                      fatigueLevel.color === 'green' ? 'text-emerald-900' :
+                      fatigueLevel.color === 'yellow' ? 'text-amber-900' :
+                      fatigueLevel.color === 'red' ? 'text-rose-900' :
                       'text-gray-900'
                     }`}>
                       {fatigueScore !== null ? `${fatigueScore}점` : '계산 중...'}
                     </div>
                     <div className={`text-[12px] font-bold px-2 py-1 rounded-full ${
-                      fatigueLevel.color === 'green' ? 'bg-green-100 text-green-700' :
-                      fatigueLevel.color === 'yellow' ? 'bg-yellow-100 text-yellow-700' :
-                      fatigueLevel.color === 'orange' ? 'bg-orange-100 text-orange-700' :
-                      fatigueLevel.color === 'red' ? 'bg-red-100 text-red-700' :
+                      fatigueLevel.color === 'green' ? 'bg-emerald-100 text-emerald-700' :
+                      fatigueLevel.color === 'yellow' ? 'bg-amber-100 text-amber-700' :
+                      fatigueLevel.color === 'red' ? 'bg-rose-100 text-rose-700' :
                       'bg-gray-100 text-gray-700'
                     }`}>
                       {fatigueLevel.text}

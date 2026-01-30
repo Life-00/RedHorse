@@ -48,16 +48,16 @@ export default function HomeDashboard({ onNavigate }: Props) {
       block_name: "지금 바로",
       block_type: "now" as const,
       total_tasks: 3,
-      completed_tasks: 1,
-      total_duration: 25,
+      completed_tasks: 2,
+      total_duration: 15,
     },
     {
       id: 2,
       block_name: "필수 실행",
       block_type: "must_do" as const,
-      total_tasks: 4,
-      completed_tasks: 0,
-      total_duration: 45,
+      total_tasks: 3,
+      completed_tasks: 1,
+      total_duration: 90,
     },
     {
       id: 3,
@@ -65,7 +65,7 @@ export default function HomeDashboard({ onNavigate }: Props) {
       block_type: "recovery" as const,
       total_tasks: 2,
       completed_tasks: 0,
-      total_duration: 20,
+      total_duration: 10,
     },
   ];
 

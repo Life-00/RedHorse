@@ -1,7 +1,6 @@
 // src/pages/home/HomeDashboardLoggedOut.tsx
 import { Moon, Sun, Calendar, TrendingUp, Shield, Zap, CheckCircle2, ArrowRight } from 'lucide-react';
 import MobileFrame from '../../components/layout/MobileFrame';
-import BottomNav from '../../components/layout/BottomNav';
 import type { ScreenType } from "../../types/app";
 
 type Props = {
@@ -81,7 +80,7 @@ export default function HomeDashboardLoggedOut({ onNavigate }: Props) {
         </div>
 
         {/* Features */}
-        <div className="flex-1 px-6 py-6 overflow-y-auto pb-32">
+        <div className="flex-1 px-6 py-6 overflow-y-auto pb-10">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">핵심 기능</h2>
           <div className="space-y-3 mb-8">
             {features.map((feature) => {
@@ -163,9 +162,6 @@ export default function HomeDashboardLoggedOut({ onNavigate }: Props) {
             </p>
           </div>
         </div>
-
-        {/* Bottom Navigation */}
-        <BottomNav active="home" onNavigate={onNavigate} />
       </div>
     
   );

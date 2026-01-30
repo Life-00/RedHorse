@@ -170,7 +170,18 @@ export default function App() {
   };
 
   const handleLogoutDone = () => {
+    // localStorage 정리
+    localStorage.removeItem('userPreferences');
+    
+    // 상태 초기화
     setIsAuthed(false);
+    setPrefs({
+      workType: "",
+      commuteTime: 30,
+      wearableDevice: "",
+      onboardingCompleted: false,
+    });
+    
     navigateToScreen("home-loggedout");
   };
 

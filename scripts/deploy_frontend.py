@@ -38,7 +38,7 @@ cloudfront_client = boto3.client('cloudfront', region_name='us-east-1')
 
 # 설정
 BUCKET_NAME = 'redhorse-s3-frontend-0126'
-FRONTEND_PREFIX = 'frontend/'
+FRONTEND_PREFIX = ''  # 루트에 직접 업로드
 AUDIO_PREFIX = 'audio/'
 OCR_PREFIX = 'ocr/'
 
@@ -112,8 +112,24 @@ def upload_to_s3(local_path, s3_key):
     # Path 객체를 문자열로 변환
     local_path_str = str(local_path)
     
+    # MIME 타입 결정
     content_type, _ = mimetypes.guess_type(local_path_str)
-    if content_type is None:
+    
+    # JavaScript 파일 MIME 타입 명시적 설정
+    if local_path_str.endswith('.js'):
+        content_type = 'application/javascript'
+    elif local_path_str.endswith('.mjs'):
+        content_type = 'application/javascript'
+    elif local_path_str.endswith('.css'):
+        content_type = 'text/css'
+    elif local_path_str.endswith('.html'):
+        content_type = 'text/html'
+    elif local_path_str.endswith('.json'):
+        content_type = 'application/json'
+    elif local_path_str.endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico')):
+        if content_type is None:
+            content_type = 'image/' + local_path_str.split('.')[-1]
+    elif content_type is None:
         content_type = 'application/octet-stream'
     
     extra_args = {

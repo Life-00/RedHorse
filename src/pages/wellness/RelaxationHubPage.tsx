@@ -190,7 +190,7 @@ export default function RelaxationHubPage({ onNavigate }: Props) {
   };
 
   return (
-    <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden relative">
+    <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden">
       <TopBar title="이완 & 휴식" onNavigate={onNavigate} backTo="wellness" />
 
       {/* Tab Switcher */}

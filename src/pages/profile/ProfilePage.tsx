@@ -6,6 +6,7 @@ import BottomNav from "../../components/layout/BottomNav";
 import { userApi } from "../../lib/api";
 import { useCurrentUser } from "../../hooks/useApi";
 import { fetchAuthSession } from "aws-amplify/auth";
+import { authSignOut } from "../../lib/auth";
 import type { UserProfile } from "../../types/api";
 
 type Props = {
@@ -68,6 +69,23 @@ export default function ProfilePage({ onNavigate, onLogout }: Props) {
       alert('이름 변경에 실패했습니다.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      // Cognito에서 로그아웃
+      await authSignOut();
+      console.log('✅ 로그아웃 성공');
+      
+      // localStorage 정리
+      localStorage.removeItem('userPreferences');
+      
+      // 부모 컴포넌트의 onLogout 콜백 호출
+      onLogout();
+    } catch (error) {
+      console.error('❌ 로그아웃 실패:', error);
+      alert('로그아웃에 실패했습니다.');
     }
   };
 
@@ -214,7 +232,7 @@ export default function ProfilePage({ onNavigate, onLogout }: Props) {
           <h3 className="text-[15px] font-black text-gray-900 mb-4">계정 관리</h3>
           <div className="space-y-2">
             <button
-              onClick={onLogout}
+              onClick={handleLogout}
               className="w-full flex items-center justify-between p-4 hover:bg-gray-50 rounded-xl transition"
             >
               <div className="flex items-center gap-3">
