@@ -6,7 +6,7 @@ import type { ScreenType } from "../../types/app";
 import BottomNav from "../../components/layout/BottomNav";
 import TopBar from "../../components/layout/TopBar";
 import ScheduleRegisterModal, { type ShiftType } from "../../components/schedule/ScheduleRegisterModal";
-import { scheduleApi, apiUtils } from "../../lib/api";
+import { scheduleApi, userApi, apiUtils } from "../../lib/api";
 import { useCurrentUser } from "../../hooks/useApi";
 import type { Schedule } from "../../types/api";
 import { getAllowedShiftTypes } from "../../utils/shiftTypeUtils";
@@ -132,10 +132,13 @@ export default function SchedulePage({ onNavigate }: Props) {
         try {
           const { userApi } = await import('../../lib/api');
           const profileResponse = await userApi.getProfile(userId);
-          setWorkType(profileResponse.user.work_type || '');
-          console.log('✅ 사용자 근무 형태:', profileResponse.user.work_type);
+          const userWorkType = profileResponse.user.work_type || 'irregular';
+          setWorkType(userWorkType);
+          console.log('✅ 사용자 근무 형태:', userWorkType);
+          console.log('✅ 허용된 교대 타입:', getAllowedShiftTypes(userWorkType));
         } catch (profileError) {
           console.warn('⚠️ 프로필 로드 실패:', profileError);
+          setWorkType('irregular'); // 기본값
         }
         
         // 데이터베이스에서 스케줄 로드
@@ -297,6 +300,16 @@ export default function SchedulePage({ onNavigate }: Props) {
     try {
       setUploading(true);
       console.log("📤 이미지 업로드 시작:", file.name, file.size, "bytes", "조:", userGroup);
+      
+      // 사용자 프로필 확인 (생성은 하지 않음 - 이미 존재해야 함)
+      try {
+        const profile = await userApi.getProfile(userId);
+        console.log('✅ 사용자 프로필 확인 완료:', profile.user);
+      } catch (profileError: any) {
+        console.error('❌ 사용자 프로필 확인 실패:', profileError);
+        alert('사용자 프로필을 찾을 수 없습니다.\n\n프로필 페이지에서 정보를 먼저 설정해주세요.');
+        return;
+      }
       
       const response = await scheduleApi.uploadScheduleImage(userId, file, userGroup);
       console.log('✅ 이미지 업로드 성공:', response);
@@ -531,9 +544,19 @@ export default function SchedulePage({ onNavigate }: Props) {
 
       {/* ✅ 참고 코드 느낌의 상단 월 안내 */}
       <div className="shrink-0 px-7 pt-2 pb-4">
-        <div>
-          <div className="text-[12px] font-black text-gray-400">이번 달</div>
-          <div className="text-[18px] font-black text-gray-900">{monthTitle}</div>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-[12px] font-black text-gray-400">이번 달</div>
+            <div className="text-[18px] font-black text-gray-900">{monthTitle}</div>
+          </div>
+          {workType && (
+            <div className="text-[11px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full">
+              {workType === '2shift' && '2교대'}
+              {workType === '3shift' && '3교대'}
+              {workType === 'fixed_night' && '고정 야간'}
+              {workType === 'irregular' && '불규칙'}
+            </div>
+          )}
         </div>
       </div>
 

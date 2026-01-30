@@ -49,7 +49,7 @@ export default function ScheduleRegisterModal({
 
   // 업로드 폼
   const [file, setFile] = useState<File | null>(null);
-  const [userGroup, setUserGroup] = useState<string>("1조");
+  const [userGroup, setUserGroup] = useState<string>("");
 
   // 근무 형태에 따른 교대 유형 필터링
   const availableShifts = useMemo(() => {

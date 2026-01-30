@@ -3,8 +3,6 @@ import { useState } from "react";
 import { User, Mail, Lock, Eye, EyeOff, Key } from "lucide-react";
 import type { ScreenType } from "../../types/app";
 import { authSignUp, authConfirmSignUp, authSignIn, authResendSignUpCode } from "../../lib/auth";
-import { fetchAuthSession } from "aws-amplify/auth";
-import { userApi } from "../../lib/api";
 
 type Props = {
   onNavigate: (s: ScreenType) => void;
@@ -41,57 +39,13 @@ export default function SignUpScreen({ onNavigate, onSignedUp }: Props) {
     try {
       await authConfirmSignUp({ email, code });
       
-      // 인증 완료 후 자동 로그인 시도
-      try {
-        await authSignIn({ email, password: pw });
-        
-        // 로그인 성공 시 사용자 동기화 및 홈으로 이동
-        await syncUserToDatabase();
-        onNavigate("home");
-      } catch (loginError: any) {
-        console.error('자동 로그인 실패:', loginError);
-        // 자동 로그인 실패 시 로그인 화면으로 이동
-        onNavigate("login");
-      }
+      // 인증 완료 후 로그인 화면으로 이동
+      alert('회원가입이 완료되었습니다!\n로그인해주세요.');
+      onNavigate("login");
     } catch (e: any) {
       setError(e?.message ?? "인증에 실패했습니다.");
     } finally {
       setLoading(false);
-    }
-  };
-
-  // 사용자 정보를 데이터베이스에 동기화하는 함수
-  const syncUserToDatabase = async () => {
-    try {
-      const session = await fetchAuthSession();
-      const cognitoUser = session.tokens?.idToken?.payload;
-      
-      if (cognitoUser) {
-        const userId = cognitoUser.sub as string;
-        const userEmail = cognitoUser.email as string;
-        const userName = cognitoUser.name as string;
-        
-        console.log('🔍 사용자 동기화 시작:', { userId, userEmail, userName });
-        
-        // 데이터베이스에 사용자 생성
-        await userApi.createProfile({
-          user_id: userId,
-          email: userEmail,
-          name: userName,
-          work_type: '2shift',
-          commute_time: 30,
-          wearable_device: 'none',
-          onboarding_completed: false
-        });
-        
-        console.log('✅ 사용자 동기화 완료');
-      }
-    } catch (error: any) {
-      console.error('❌ 사용자 동기화 실패:', error);
-      // 이미 존재하는 사용자인 경우 무시
-      if (!error.message?.includes('already exists')) {
-        throw error;
-      }
     }
   };
 

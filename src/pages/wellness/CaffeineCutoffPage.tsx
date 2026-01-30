@@ -94,28 +94,17 @@ export default function CaffeineCutoffPage({ onNavigate }: Props) {
 
   return (
     <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden">
-      <TopBar title="카페인 컷오프" onNavigate={onNavigate} backTo="wellness" />
+      <TopBar 
+        title="카페인 컷오프" 
+        subtitle="수면 품질을 위한 마지막 허용 시각"
+        onNavigate={onNavigate} 
+        backTo="wellness" 
+      />
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto pb-32">
-        {/* Header 설명 */}
-        <div className="px-7 pt-2 pb-6 border-b border-gray-100 bg-white">
-          <div className="flex items-center gap-3 mb-1">
-            <button
-              onClick={() => onNavigate("wellness")}
-              className="flex items-center justify-center text-indigo-600 hover:text-indigo-700 active:scale-95 transition-all"
-              aria-label="뒤로가기"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <div className="text-[20px] font-black text-gray-900">카페인 컷오프</div>
-          </div>
-          <div className="text-[12px] font-black text-gray-400 ml-9">수면 품질을 위한 마지막 허용 시각</div>
-        </div>
-
         <div className="px-6 py-8">
+        
         {/* Clock */}
         <div className="relative w-64 h-64 mx-auto">
           <svg className="w-full h-full" viewBox="0 0 200 200">

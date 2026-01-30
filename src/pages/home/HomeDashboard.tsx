@@ -69,156 +69,138 @@ export default function HomeDashboard({ onNavigate }: Props) {
     },
   ];
 
-  // 데이터 로드
-  useEffect(() => {
+  // 데이터 로드 함수 정의
+  const loadDashboardData = async () => {
     if (!userId || userLoading) return;
+    
+    try {
+      setLoading(true);
+      
+      // 매번 최신 날짜 계산
+      const currentDate = apiUtils.getTodayString();
+      console.log('🔍 홈 화면 데이터 로드 - 현재 날짜:', currentDate);
 
-    const loadDashboardData = async () => {
+      // Cognito에서 사용자 이름 가져오기
       try {
-        setLoading(true);
-        
-        // 매번 최신 날짜 계산
-        const currentDate = apiUtils.getTodayString();
-        console.log('🔍 홈 화면 데이터 로드 - 현재 날짜:', currentDate);
-
-        // Cognito에서 사용자 이름 가져오기
-        try {
-          const session = await fetchAuthSession();
-          const cognitoUser = session.tokens?.idToken?.payload;
-          console.log('🔍 현재 로그인된 Cognito 사용자 전체 정보:', cognitoUser);
-          if (cognitoUser?.name) {
-            setCognitoUserName(cognitoUser.name as string);
-            console.log('🔍 Cognito 사용자 이름:', cognitoUser.name);
-            console.log('🔍 Cognito 사용자 이메일:', cognitoUser.email);
-            console.log('🔍 Cognito 사용자 ID:', cognitoUser.sub);
-          }
-        } catch (error) {
-          console.error('Cognito 사용자 정보 가져오기 실패:', error);
+        const session = await fetchAuthSession();
+        const cognitoUser = session.tokens?.idToken?.payload;
+        console.log('🔍 현재 로그인된 Cognito 사용자 전체 정보:', cognitoUser);
+        if (cognitoUser?.name) {
+          setCognitoUserName(cognitoUser.name as string);
+          console.log('🔍 Cognito 사용자 이름:', cognitoUser.name);
+          console.log('🔍 Cognito 사용자 이메일:', cognitoUser.email);
+          console.log('🔍 Cognito 사용자 ID:', cognitoUser.sub);
         }
-
-        // 병렬로 데이터 로드
-        const [
-          profileResponse,
-          scheduleResponse,
-          sleepPlanResponse,
-          fatigueResponse,
-          caffeineResponse
-        ] = await Promise.allSettled([
-          userApi.getProfile(userId),
-          scheduleApi.getSchedules(userId, currentDate, currentDate),
-          aiApi.getSleepPlan(userId, currentDate),
-          fatigueApi.getFatigueAssessment(userId, currentDate),
-          aiApi.getCaffeinePlan(userId, currentDate)
-        ]);
-
-        // 프로필 데이터
-        if (profileResponse.status === 'fulfilled') {
-          setUserProfile(profileResponse.value.user);
-          console.log('✅ 사용자 프로필 로드 성공:', profileResponse.value.user);
-        } else {
-          console.error('❌ 사용자 프로필 로드 실패:', profileResponse.reason);
-          
-          // 사용자가 없으면 자동으로 생성 시도
-          if (profileResponse.reason.message?.includes('사용자를 찾을 수 없습니다')) {
-            try {
-              console.log('🔄 사용자 프로필 자동 생성 시도...');
-              const session = await fetchAuthSession();
-              const cognitoUser = session.tokens?.idToken?.payload;
-              
-              if (cognitoUser) {
-                const newUserData = {
-                  user_id: cognitoUser.sub as string,
-                  email: cognitoUser.email as string,
-                  name: cognitoUser.name as string || cognitoUser.email as string,
-                  onboarding_completed: false
-                };
-                
-                const createdUser = await userApi.createProfile(newUserData);
-                setUserProfile(createdUser.user);
-                console.log('✅ 사용자 프로필 자동 생성 성공:', createdUser.user);
-              }
-            } catch (createError) {
-              console.error('❌ 사용자 프로필 자동 생성 실패:', createError);
-            }
-          }
-        }
-
-        // 오늘 스케줄
-        if (scheduleResponse.status === 'fulfilled') {
-          const schedules = scheduleResponse.value.schedules;
-          const todayScheduleData = schedules.length > 0 ? schedules[0] : null;
-          setTodaySchedule(todayScheduleData);
-          console.log('✅ 오늘 스케줄 로드 성공:', todayScheduleData);
-        } else {
-          console.error('❌ 스케줄 로드 실패:', scheduleResponse.reason);
-        }
-
-        // 수면 계획
-        if (sleepPlanResponse.status === 'fulfilled') {
-          setSleepPlan(sleepPlanResponse.value.sleep_plan);
-        } else {
-          console.error('❌ 수면 계획 로드 실패:', sleepPlanResponse.reason);
-        }
-
-        // 피로 위험도
-        if (fatigueResponse.status === 'fulfilled') {
-          setFatigueAssessment(fatigueResponse.value.assessment);
-        } else {
-          console.error('❌ 피로 위험도 로드 실패:', fatigueResponse.reason);
-        }
-
-        // 카페인 컷오프
-        if (caffeineResponse.status === 'fulfilled') {
-          const plan = caffeineResponse.value.caffeine_plan;
-          if (plan?.cutoff_time) {
-            setCaffeineCutoff(plan.cutoff_time);
-          }
-        } else {
-          console.error('❌ 카페인 계획 로드 실패:', caffeineResponse.reason);
-        }
-
       } catch (error) {
-        console.error('대시보드 데이터 로드 실패:', error);
-      } finally {
-        setLoading(false);
+        console.error('Cognito 사용자 정보 가져오기 실패:', error);
       }
-    };
 
+      // 병렬로 데이터 로드
+      const [
+        profileResponse,
+        scheduleResponse,
+        sleepPlanResponse,
+        fatigueResponse,
+        caffeineResponse
+      ] = await Promise.allSettled([
+        userApi.getProfile(userId),
+        scheduleApi.getSchedules(userId, currentDate, currentDate),
+        aiApi.getSleepPlan(userId, currentDate),
+        fatigueApi.getFatigueAssessment(userId, currentDate),
+        aiApi.getCaffeinePlan(userId, currentDate)
+      ]);
+
+      // 프로필 데이터
+      if (profileResponse.status === 'fulfilled') {
+        setUserProfile(profileResponse.value.user);
+        console.log('✅ 사용자 프로필 로드 성공:', profileResponse.value.user);
+      } else {
+        console.error('❌ 사용자 프로필 로드 실패:', profileResponse.reason);
+        
+        // 사용자가 없으면 자동으로 생성 시도
+        if (profileResponse.reason.message?.includes('사용자를 찾을 수 없습니다')) {
+          try {
+            console.log('🔄 사용자 프로필 자동 생성 시도...');
+            const session = await fetchAuthSession();
+            const cognitoUser = session.tokens?.idToken?.payload;
+            
+            if (cognitoUser) {
+              const newUserData = {
+                user_id: cognitoUser.sub as string,
+                email: cognitoUser.email as string,
+                name: cognitoUser.name as string || cognitoUser.email as string,
+                onboarding_completed: false
+              };
+              
+              const createdUser = await userApi.createProfile(newUserData);
+              setUserProfile(createdUser.user);
+              console.log('✅ 사용자 프로필 자동 생성 성공:', createdUser.user);
+            }
+          } catch (createError) {
+            console.error('❌ 사용자 프로필 자동 생성 실패:', createError);
+          }
+        }
+      }
+
+      // 오늘 스케줄
+      if (scheduleResponse.status === 'fulfilled') {
+        const schedules = scheduleResponse.value.schedules;
+        const todayScheduleData = schedules.length > 0 ? schedules[0] : null;
+        setTodaySchedule(todayScheduleData);
+        console.log('✅ 오늘 스케줄 로드 성공:', todayScheduleData);
+      } else {
+        console.error('❌ 스케줄 로드 실패:', scheduleResponse.reason);
+      }
+
+      // 수면 계획
+      if (sleepPlanResponse.status === 'fulfilled') {
+        setSleepPlan(sleepPlanResponse.value.sleep_plan);
+      } else {
+        console.error('❌ 수면 계획 로드 실패:', sleepPlanResponse.reason);
+      }
+
+      // 피로 위험도
+      if (fatigueResponse.status === 'fulfilled') {
+        setFatigueAssessment(fatigueResponse.value.assessment);
+      } else {
+        console.error('❌ 피로 위험도 로드 실패:', fatigueResponse.reason);
+      }
+
+      // 카페인 컷오프
+      if (caffeineResponse.status === 'fulfilled') {
+        const plan = caffeineResponse.value.caffeine_plan;
+        if (plan?.cutoff_time) {
+          setCaffeineCutoff(plan.cutoff_time);
+        }
+      } else {
+        console.error('❌ 카페인 계획 로드 실패:', caffeineResponse.reason);
+      }
+
+    } catch (error) {
+      console.error('대시보드 데이터 로드 실패:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 컴포넌트 마운트 시 데이터 로드
+  useEffect(() => {
     loadDashboardData();
   }, [userId, userLoading]); // today 의존성 제거 - 매번 새로 계산하므로
 
   // 화면이 표시될 때마다 데이터 새로고침 (visibility API 사용)
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (!document.hidden && userId && !userLoading) {
-        // 화면이 다시 보일 때 데이터 새로고침
-        const loadDashboardData = async () => {
-          try {
-            const currentDate = apiUtils.getTodayString();
-            console.log('🔄 홈 화면 스케줄 새로고침 시작 - 날짜:', currentDate);
-            
-            const [scheduleResponse] = await Promise.allSettled([
-              scheduleApi.getSchedules(userId, currentDate, currentDate),
-            ]);
-
-            if (scheduleResponse.status === 'fulfilled') {
-              const schedules = scheduleResponse.value.schedules;
-              const todayScheduleData = schedules.length > 0 ? schedules[0] : null;
-              setTodaySchedule(todayScheduleData);
-              console.log('✅ 홈 화면 스케줄 새로고침 완료:', todayScheduleData);
-            }
-          } catch (error) {
-            console.error('❌ 스케줄 새로고침 실패:', error);
-          }
-        };
-        
+      if (!document.hidden) {
+        // 화면이 다시 보일 때 전체 데이터 새로고침
         loadDashboardData();
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [userId, userLoading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleLogout = async () => {
     try {

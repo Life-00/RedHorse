@@ -49,9 +49,10 @@ export default function App() {
   const [pendingEmail, setPendingEmail] = useState("");
 
   // 화면 전환 시 홈으로 돌아가면 key 업데이트
-  const navigateToScreen = (newScreen: ScreenType) => {
-    if (newScreen === "home") {
-      setHomeKey(prev => prev + 1); // 홈으로 돌아갈 때마다 key 증가
+  const navigateToScreen = (newScreen: ScreenType, fromScreen?: ScreenType) => {
+    // 스케줄 페이지에서 홈으로 돌아올 때 강제 리렌더링
+    if (newScreen === "home" && (fromScreen === "schedule" || screen === "schedule")) {
+      setHomeKey(prev => prev + 1);
     }
     setScreen(newScreen);
   };
@@ -108,55 +109,56 @@ export default function App() {
     localStorage.setItem("userPreferences", JSON.stringify(next));
   };
 
-  const handleOnboardingComplete = () => {
+  const handleOnboardingComplete = async () => {
+    // 온보딩 완료 상태 업데이트
     updatePrefs({ onboardingCompleted: true });
-    // 온보딩 완료 후 로그인 상태에 따라 적절한 화면으로 이동
-    navigateToScreen(isAuthed ? "home" : "home-loggedout");
-  };
-
-  const handleLoginSuccess = async () => {
-    console.log('🔍 로그인 성공 - 사용자 동기화 시작');
     
-    // 로그인 성공 후 데이터베이스에 사용자 정보 동기화
+    // 사용자 프로필 생성
     try {
       const session = await fetchAuthSession();
-      console.log('🔍 Cognito 세션:', session);
       const cognitoUser = session.tokens?.idToken?.payload;
-      console.log('🔍 Cognito 사용자 정보:', cognitoUser);
       
       if (cognitoUser) {
         const userId = cognitoUser.sub as string;
         const email = cognitoUser.email as string;
-        const name = cognitoUser.name as string;
+        const name = cognitoUser.name as string || cognitoUser.email as string;
         
-        console.log('🔍 추출된 사용자 정보:', { userId, email, name });
+        console.log('🔍 온보딩 완료 - 사용자 프로필 생성:', { userId, email, name });
         
-        // 데이터베이스에 사용자 생성 또는 업데이트
+        // 온보딩에서 선택한 정보로 프로필 생성
         try {
-          console.log('🔍 사용자 생성 API 호출 시작');
-          const result = await userApi.createProfile({
+          await userApi.createProfile({
             user_id: userId,
             email: email,
             name: name,
-            work_type: '2shift', // 기본값
-            commute_time: 30,
-            wearable_device: 'none',
-            onboarding_completed: false
+            work_type: prefs.workType || '2shift',
+            commute_time: prefs.commuteTime || 30,
+            wearable_device: prefs.wearableDevice || 'none',
+            onboarding_completed: true
           });
-          console.log('✅ 사용자 생성 성공:', result);
+          console.log('✅ 사용자 프로필 생성 성공');
         } catch (error: any) {
-          console.log('❌ 사용자 생성 오류:', error);
-          // 사용자가 이미 존재하는 경우 무시
-          if (!error.message?.includes('already exists')) {
-            console.error('사용자 생성 실패:', error);
+          // 이미 존재하는 경우 업데이트
+          if (error.message?.includes('already exists')) {
+            console.log('⚠️ 사용자 프로필이 이미 존재합니다. 업데이트를 시도합니다.');
+            // 프로필 업데이트는 별도 API가 필요하므로 일단 무시
+          } else {
+            console.error('❌ 사용자 프로필 생성 실패:', error);
           }
         }
       }
     } catch (error) {
-      console.error('❌ 사용자 동기화 실패:', error);
+      console.error('❌ 온보딩 완료 처리 실패:', error);
     }
     
-    // 인증 상태를 먼저 업데이트하고 화면 전환
+    // 홈 화면으로 이동
+    navigateToScreen(isAuthed ? "home" : "home-loggedout");
+  };
+
+  const handleLoginSuccess = async () => {
+    console.log('🔍 로그인 성공');
+    
+    // 인증 상태를 먼저 업데이트
     setIsAuthed(true);
     
     // 온보딩 완료 여부에 따라 화면 전환

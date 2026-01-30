@@ -147,26 +147,14 @@ export default function FatigueRiskScorePage({ onNavigate }: Props) {
 
   return (
     <div className="h-full w-full bg-[#F8F9FD] flex flex-col overflow-hidden relative">
-      <TopBar title="피로 위험도" onNavigate={onNavigate} backTo="home" />
+      <TopBar 
+        title="피로 위험도" 
+        subtitle="오늘의 안전 상태 평가"
+        onNavigate={onNavigate} 
+        backTo="wellness" 
+      />
 
       <div className="flex-1 overflow-y-auto pb-32">
-        {/* Header 설명 */}
-        <div className="px-7 pt-2 pb-6 border-b border-gray-100 bg-white">
-          <div className="flex items-center gap-3 mb-1">
-            <button
-              onClick={() => onNavigate("home")}
-              className="flex items-center justify-center text-indigo-600 hover:text-indigo-700 active:scale-95 transition-all"
-              aria-label="뒤로가기"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <div className="text-[20px] font-black text-gray-900">피로 위험도</div>
-          </div>
-          <div className="text-[12px] font-black text-gray-400 ml-9">오늘의 안전 상태 평가</div>
-        </div>
-
         {/* Risk Meter */}
         <div className="px-7 py-8">
           <div className="text-center mb-6">
