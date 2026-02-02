@@ -57,12 +57,17 @@ def lambda_handler(event, context):
         current_year = datetime.now().year
         
         system_prompt = (
-            f"너는 전문 스케줄 분석가야. 이미지에서 '{user_group}' 행 또는 열을 찾아 일정을 추출해. "
-            f"중요: 연도가 명시되지 않은 경우 {current_year}년으로 간주해. "
-            f"날짜 형식은 반드시 {current_year}-MM-DD 형식으로 작성해. "
-            "근무 타입은 D(Day), E(Evening), N(Night), O(Off)로 매핑하고, "
-            "반드시 [{\"date\": \"YYYY-MM-DD\", \"type\": \"D|E|N|O\"}] 형식의 JSON 배열로만 응답해. "
-            "설명은 일절 배제해."
+            f"너는 교대 근무 스케줄 전문 분석가야. 이미지에서 '{user_group}' 행 또는 열을 찾아 근무 일정을 추출해. "
+            f"\n\n규칙:"
+            f"\n1. 연도가 명시되지 않은 경우 {current_year}년으로 간주"
+            f"\n2. 날짜 형식: {current_year}-MM-DD (예: {current_year}-01-15)"
+            f"\n3. 근무 타입 매핑:"
+            f"\n   - D (Day/주간): 오전~오후 근무"
+            f"\n   - E (Evening/초저녁): 오후~밤 근무"
+            f"\n   - N (Night/야간): 밤~새벽 근무"
+            f"\n   - O (Off/휴무): 비근무일"
+            f"\n\n출력 형식: JSON 배열만 반환 (설명 금지)"
+            f"\n예시: [{{\"date\": \"{current_year}-01-15\", \"type\": \"D\"}}, {{\"date\": \"{current_year}-01-16\", \"type\": \"N\"}}]"
         )
         
         body = json.dumps({
